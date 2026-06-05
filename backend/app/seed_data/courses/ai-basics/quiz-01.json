@@ -1,0 +1,38 @@
+{
+  "title": "什么是 AI？测验",
+  "questions": [
+    {
+      "question_text": "以下哪项最能定义人工智能 (AI)？",
+      "options": [
+        "能够执行需要类人智能的任务的机器",
+        "任何运行在服务器上的计算机程序",
+        "只有具备物理身体的机器人",
+        "一种特定的编程语言"
+      ],
+      "correct_answer_index": 0,
+      "explanation": "AI 指的是能够执行需要人类智能的任务的机器或软件，如学习、推理和解决问题。"
+    },
+    {
+      "question_text": "目前所有的 AI 系统都属于：",
+      "options": [
+        "强人工智能 (General AI)",
+        "弱人工智能 (Narrow AI)",
+        "超级智能 AI",
+        "有意识的 AI"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "我们今天使用的每个 AI 系统——ChatGPT、推荐引擎、人脸识别——都是弱人工智能，专为特定任务设计。"
+    },
+    {
+      "question_text": "一个基于规则的电影推荐系统（if-else 逻辑）属于：",
+      "options": [
+        "深度学习",
+        "最简单的 AI 形式",
+        "强人工智能",
+        "量子计算"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "基于规则的系统是最简单的 AI 形式——它们遵循预先编写的规则，而非从数据中学习。"
+    }
+  ]
+}

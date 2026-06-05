@@ -1,0 +1,38 @@
+{
+  "title": "现实世界中的 AI 测验",
+  "questions": [
+    {
+      "question_text": "哪种神经网络架构驱动了现代 NLP 模型（如 ChatGPT 和 Claude）？",
+      "options": [
+        "卷积神经网络 (CNN)",
+        "Transformer",
+        "决策树 (Decision Trees)",
+        "K-Means 聚类"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "Transformer 能同时处理句子中的所有词并捕获上下文关系——它是现代语言模型的基础。"
+    },
+    {
+      "question_text": "使用'协同过滤 (Collaborative Filtering)'的推荐系统是如何工作的？",
+      "options": [
+        "分析物品的内容属性",
+        "'喜欢 X 的人也喜欢 Y'——基于用户行为模式",
+        "随机推荐物品",
+        "只推荐最热门的物品"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "协同过滤找到用户之间的模式：如果用户 A 和 B 都喜欢 X，且 A 也喜欢 Y，则向 B 推荐 Y。"
+    },
+    {
+      "question_text": "以下哪项不是计算机视觉的真实应用？",
+      "options": [
+        "医学影像分析用于肿瘤检测",
+        "自动驾驶检测行人",
+        "AI 写哲学论文",
+        "人脸识别解锁手机"
+      ],
+      "correct_answer_index": 2,
+      "explanation": "写论文属于自然语言处理 (NLP)，不是计算机视觉。计算机视觉处理的是图像和视频。"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "title": "机器学习测验",
+  "questions": [
+    {
+      "question_text": "在传统编程中（不使用 ML），你编写显式规则。在机器学习中，你：",
+      "options": [
+        "编写更详细的规则",
+        "让计算机从数据中学习模式",
+        "完全不需要数据",
+        "手动标注每一个可能的输入"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "ML 将方式从编写规则转变为让计算机从数据中学习模式。你提供样本，算法自行找出规律。"
+    },
+    {
+      "question_text": "你有一个标注了'垃圾邮件'和'非垃圾邮件'的邮件数据集。这属于：",
+      "options": [
+        "无监督学习 (Unsupervised Learning)",
+        "强化学习 (Reinforcement Learning)",
+        "监督学习 (Supervised Learning)",
+        "基于规则的学习"
+      ],
+      "correct_answer_index": 2,
+      "explanation": "标注数据（每封邮件有'垃圾'或'非垃圾'标签）是监督学习的定义特征。"
+    },
+    {
+      "question_text": "当模型记住了训练数据但在新数据上表现不佳，这被称为：",
+      "options": [
+        "欠拟合 (Underfitting)",
+        "过拟合 (Overfitting)",
+        "监督学习",
+        "良好的泛化能力"
+      ],
+      "correct_answer_index": 1,
+      "explanation": "过拟合发生在模型对训练数据学得'太好'——连噪声也记住了——导致无法泛化到新样本。"
+    }
+  ]
+}
