@@ -205,7 +205,7 @@ export function AnalyticsPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- no userId means nothing to fetch
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, mountedRef])
 
   if (loading) {
     return <LoadingSpinner />

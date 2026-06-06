@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/tauri'
 import { useMountedRef } from '../hooks/useMountedRef'
@@ -13,7 +13,7 @@ export function CoursePage() {
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useMountedRef()
 
-  const fetchCourse = () => {
+  const fetchCourse = useCallback(() => {
     if (!slug) {
       setLoading(false)
       return
@@ -35,12 +35,12 @@ export function CoursePage() {
           setLoading(false)
         }
       })
-  }
+  }, [slug, mountedRef])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
     fetchCourse()
-  }, [slug])
+  }, [fetchCourse])
 
   if (loading) {
     return <LoadingSpinner />

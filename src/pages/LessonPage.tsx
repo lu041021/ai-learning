@@ -76,7 +76,7 @@ export function LessonPage() {
           setLoading(false)
         }
       })
-  }, [lessonId, slug])
+  }, [lessonId, slug, mountedRef])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern

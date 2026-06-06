@@ -37,12 +37,15 @@ export function SearchBar() {
     return `/courses/${r.context_slug}/lessons/${r.context_id}/quiz`
   }
 
-  const handleSelect = (r: SearchResultItem) => {
-    setOpen(false)
-    setQuery('')
-    setResults([])
-    navigate(getNavTarget(r))
-  }
+  const handleSelect = useCallback(
+    (r: SearchResultItem) => {
+      setOpen(false)
+      setQuery('')
+      setResults([])
+      navigate(getNavTarget(r))
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -70,7 +73,7 @@ export function SearchBar() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [open, results, selectedIdx])
+  }, [open, results, selectedIdx, handleSelect])
 
   useEffect(() => {
     if (open) inputRef.current?.focus()

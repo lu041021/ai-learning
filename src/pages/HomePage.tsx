@@ -38,7 +38,7 @@ export function HomePage() {
           setLoading(false)
         }
       })
-  }, [userId])
+  }, [userId, mountedRef])
 
   const continueLearning = recommendations.filter(
     (r) => r.completedLessons > 0 && r.completedLessons < r.totalLessons,

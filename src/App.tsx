@@ -146,7 +146,7 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
       .catch(() => {
         // API failure: safest to let user stay rather than loop-redirect
       })
-  }, [userId, location.pathname, profile])
+  }, [userId, location.pathname, profile, navigate, setProfile])
 
   return <>{children}</>
 }

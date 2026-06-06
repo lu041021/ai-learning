@@ -36,7 +36,7 @@ export function AITutorPanel() {
     return () => {
       cancelStream()
     }
-  }, [])
+  }, [cancelStream])
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
@@ -45,7 +45,7 @@ export function AITutorPanel() {
   // Reset conversation when switching lessons
   useEffect(() => {
     newChat()
-  }, [lessonId])
+  }, [lessonId, newChat])
 
   useEffect(() => {
     if (lessonId) {

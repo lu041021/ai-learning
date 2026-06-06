@@ -73,7 +73,7 @@ export function SettingsPage() {
         setLoaded(true)
         toast.error('加载配置失败')
       })
-  }, [])
+  }, [models])
 
   const handleSave = async () => {
     setSaving(true)

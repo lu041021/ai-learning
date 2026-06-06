@@ -69,7 +69,7 @@ export function McpPlaygroundPage() {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [mountedRef])
 
   useEffect(() => {
     resultsEndRef.current?.scrollIntoView({ behavior: 'smooth' })

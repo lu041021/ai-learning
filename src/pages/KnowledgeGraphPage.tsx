@@ -37,7 +37,7 @@ export function KnowledgeGraphPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- no userId means nothing to load
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, mountedRef])
 
   const filteredData = data
     ? (() => {
