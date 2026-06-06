@@ -65,8 +65,8 @@ export function LessonPage() {
       .then(([l, course]) => {
         if (mountedRef.current) {
           setLesson(l)
-          setFlatLessons(course.chapters.flatMap((ch) => ch.lessons))
-          document.title = `${l.title} - AI 学堂`
+          if (course) setFlatLessons(course.chapters.flatMap((ch) => ch.lessons))
+          if (l) document.title = `${l.title} - AI 学堂`
           setLoading(false)
         }
       })

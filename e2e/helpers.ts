@@ -161,9 +161,8 @@ const populatedMocks: Record<string, unknown> = {
     id: 1001,
     chapter_id: 101,
     title: 'What is ML?',
-    content: '# What is ML?\n\nMachine learning is a subset of AI.',
-    sort_order: 1,
-    duration_minutes: 20,
+    content_md: '# What is ML?\n\nMachine learning is a subset of AI.',
+    order_index: 1,
   },
   get_quiz: {
     id: 1,

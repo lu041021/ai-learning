@@ -25,7 +25,7 @@ export function CoursePage() {
       .then((c) => {
         if (mountedRef.current) {
           setCourse(c)
-          document.title = `${c.title} - AI 学堂`
+          if (c) document.title = `${c.title} - AI 学堂`
           setLoading(false)
         }
       })

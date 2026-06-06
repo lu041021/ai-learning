@@ -46,7 +46,7 @@ export function QuizPage() {
       .then((q) => {
         if (mountedRef.current) {
           setQuiz(q)
-          setAnswers(new Array(q.questions.length).fill(-1))
+          if (q) setAnswers(new Array(q.questions.length).fill(-1))
           setLoading(false)
         }
       })
