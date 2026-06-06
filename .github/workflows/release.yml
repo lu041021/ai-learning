@@ -4,6 +4,11 @@ on:
     tags:
       - 'ai-learning-platform-v*'
       - 'ai-learning-frontend-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. ai-learning-platform-v0.2.0)'
+        required: true
 jobs:
   build-tauri:
     strategy:
@@ -42,8 +47,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          releaseName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           releaseBody: 'See CHANGELOG.md for details.'
           releaseDraft: false
           prerelease: false
