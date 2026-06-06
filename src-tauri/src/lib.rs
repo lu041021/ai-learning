@@ -12,7 +12,30 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+fn install_panic_hook() {
+    use std::io::Write;
+    std::panic::set_hook(Box::new(|info| {
+        let msg = info.to_string();
+        if let Some(log_dir) = dirs::data_local_dir() {
+            let log_path = log_dir.join("ai-learning").join("panic.log");
+            if let Some(parent) = log_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+            {
+                let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+                let _ = writeln!(file, "[{ts}] PANIC: {msg}");
+            }
+        }
+        eprintln!("PANIC: {msg}");
+    }));
+}
+
 pub fn run() {
+    install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {

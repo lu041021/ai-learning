@@ -135,10 +135,10 @@ just check
 # 全部测试
 just test-all
 
-# 前端单元测试 (7 文件, 35 测试)
+# 前端单元测试 (9 文件, 55 测试)
 npx vitest run
 
-# Rust 测试 (33 单元 + 13 集成 = 46)
+# Rust 测试 (33 单元 + 31 集成 = 64)
 cargo test
 
 # E2E 测试
