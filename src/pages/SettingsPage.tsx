@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/tauri'
 import { useUserStore, useProgressStore, useChatStore } from '../stores'
 import { toast } from '../components/ui/Toast'
+import { useTheme } from '../contexts/ThemeContext'
 
 const PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic (Claude)' },
@@ -42,13 +43,14 @@ const PROVIDER_KEY_LABELS: Record<
 export function SettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
-  const [theme, setTheme] = useState('dark')
   const [apiProvider, setApiProvider] = useState('anthropic')
   const [customModel, setCustomModel] = useState('')
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [clearing, setClearing] = useState(false)
+
+  const { theme, toggleTheme } = useTheme()
 
   const userId = useUserStore((s) => s.userId)
   const fetchProgress = useProgressStore((s) => s.fetchProgress)
@@ -65,7 +67,6 @@ export function SettingsPage() {
         const key = c.api_key || ''
         setApiKey(key)
         setModel(c.model || models[0]?.value || '')
-        setTheme(c.theme || 'dark')
         setApiProvider(c.api_provider || 'anthropic')
         setLoaded(true)
       })
@@ -80,7 +81,6 @@ export function SettingsPage() {
     try {
       const finalModel = customModel || model
       await api.setConfig(apiKey, finalModel, theme, apiProvider)
-      document.documentElement.setAttribute('data-theme', theme)
       toast.success('配置已保存')
     } catch {
       toast.error('保存配置失败')
@@ -89,8 +89,7 @@ export function SettingsPage() {
   }
 
   const handleThemeChange = (t: string) => {
-    setTheme(t)
-    document.documentElement.setAttribute('data-theme', t)
+    if (t !== theme) toggleTheme()
   }
 
   const handleClearData = async () => {

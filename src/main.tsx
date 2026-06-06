@@ -11,7 +11,10 @@ interface AppConfig {
 
 invoke<AppConfig>('get_config')
   .then((c) => {
-    document.documentElement.setAttribute('data-theme', c.theme || 'dark')
+    if (!localStorage.getItem('theme') && c.theme) {
+      localStorage.setItem('theme', c.theme)
+      document.documentElement.setAttribute('data-theme', c.theme)
+    }
   })
   .catch(() => {})
 
