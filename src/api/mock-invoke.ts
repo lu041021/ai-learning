@@ -672,7 +672,7 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     return undefined as T
   }
   try {
-    return handler(args) as T
+    return handler(args ?? {}) as T
   } catch (e) {
     console.error(`[mock-invoke] Error in ${cmd}:`, e)
     throw e
