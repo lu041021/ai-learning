@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/tauri'
 import { SafeSnippet } from '../components/common/SafeSnippet'
+import { useMountedRef } from '../hooks/useMountedRef'
 import type { SearchResultItem } from '../types'
+import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { ErrorBlock } from '../components/common/ErrorBlock'
 
 type Tab = 'all' | 'course' | 'lesson' | 'quiz_question'
 
@@ -12,27 +15,34 @@ export function SearchPage() {
   const [tab, setTab] = useState<Tab>('all')
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
+  const [error, setError] = useState<string | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useMountedRef()
 
   const doSearch = (q: string) => {
     if (q.trim().length < 1) {
       setResults([])
       setSearched(false)
+      setError(null)
       return
     }
     setLoading(true)
     setSearched(true)
-    api.searchAll(q, 50).then((r) => {
-      if (mountedRef.current) { setResults(r); setLoading(false) }
-    }).catch(() => {
-      if (mountedRef.current) { setLoading(false) }
-    })
+    setError(null)
+    api
+      .searchAll(q, 50)
+      .then((r) => {
+        if (mountedRef.current) {
+          setResults(r)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) {
+          setError('搜索失败，请稍后重试')
+          setLoading(false)
+        }
+      })
   }
 
   const handleInput = (value: string) => {
@@ -108,12 +118,19 @@ export function SearchPage() {
             ))}
           </div>
 
-          {loading && (
-            <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>搜索中...</div>
-          )}
+          {loading && <LoadingSpinner text="搜索中..." />}
 
-          {!loading && filtered.length === 0 && (
-            <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center', fontSize: '14px' }}>
+          {error && !loading && <ErrorBlock message={error} onRetry={() => doSearch(query)} />}
+
+          {!loading && !error && filtered.length === 0 && (
+            <div
+              style={{
+                color: 'var(--text-muted)',
+                padding: '40px',
+                textAlign: 'center',
+                fontSize: '14px',
+              }}
+            >
               没有找到与 "{query}" 相关的结果
             </div>
           )}
@@ -132,22 +149,47 @@ export function SearchPage() {
                     border: '1px solid var(--border)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{
-                      fontSize: '10px', padding: '1px 6px', borderRadius: '8px',
-                      background: r.source_type === 'course' ? 'var(--accent-light)' : r.source_type === 'lesson' ? 'var(--success-light)' : 'var(--warning-light)',
-                      color: r.source_type === 'course' ? 'var(--accent)' : r.source_type === 'lesson' ? 'var(--success)' : 'var(--warning)',
-                      fontWeight: 600,
-                    }}>
-                      {r.source_type === 'course' ? '课程' : r.source_type === 'lesson' ? '课时' : '题目'}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '8px',
+                        background:
+                          r.source_type === 'course'
+                            ? 'var(--accent-light)'
+                            : r.source_type === 'lesson'
+                              ? 'var(--success-light)'
+                              : 'var(--warning-light)',
+                        color:
+                          r.source_type === 'course'
+                            ? 'var(--accent)'
+                            : r.source_type === 'lesson'
+                              ? 'var(--success)'
+                              : 'var(--warning)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {r.source_type === 'course'
+                        ? '课程'
+                        : r.source_type === 'lesson'
+                          ? '课时'
+                          : '题目'}
                     </span>
-                    <span style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
+                    <span
+                      style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}
+                    >
                       {r.title}
                     </span>
                   </div>
-                  <p
-                    style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}
-                  >
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                     <SafeSnippet html={r.snippet || ''} />
                   </p>
                 </Link>
@@ -158,7 +200,14 @@ export function SearchPage() {
       )}
 
       {!searched && (
-        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+        <div
+          style={{
+            padding: '60px',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '14px',
+          }}
+        >
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#x1F50D;</div>
           <p>输入关键词开始搜索</p>
           <p style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>

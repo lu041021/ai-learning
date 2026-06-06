@@ -34,5 +34,8 @@ Thumbs.db
 test-results/
 playwright-report/
 
+# Test coverage
+coverage/
+
 # CodeGraph
 .codegraph/

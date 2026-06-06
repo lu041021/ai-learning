@@ -2,7 +2,10 @@ use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
-use crate::models::imports::{AwesomeLink, AwesomeRepo, DuplicateCheckResult, FeedArticle, FeedSubscription, ImportCourseResult, LinkPreview};
+use crate::models::imports::{
+    AwesomeLink, AwesomeRepo, DuplicateCheckResult, FeedArticle, FeedSubscription,
+    ImportCourseResult, LinkPreview,
+};
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
 #[tauri::command]
@@ -14,11 +17,8 @@ pub async fn import_from_url(
     db: State<'_, Arc<Mutex<Connection>>>,
 ) -> Result<ImportCourseResult, String> {
     let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
-    let ai_course = crate::services::course_importer::fetch_and_structure_course(
-        &url,
-        &client,
-    )
-    .await?;
+    let ai_course =
+        crate::services::course_importer::fetch_and_structure_course(&url, &client).await?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     crate::services::course_importer::insert_course_to_db(&conn, &ai_course, &url)
@@ -76,7 +76,8 @@ pub async fn fetch_feed_articles(
     feed_url: String,
     db: State<'_, Arc<Mutex<Connection>>>,
 ) -> Result<Vec<FeedArticle>, String> {
-    let (feed_title, articles) = crate::services::feed_importer::fetch_feed_articles(&feed_url).await?;
+    let (feed_title, articles) =
+        crate::services::feed_importer::fetch_feed_articles(&feed_url).await?;
 
     // Update feed title and last_fetched in DB
     let conn = db.lock().map_err(|e| e.to_string())?;

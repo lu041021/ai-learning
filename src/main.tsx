@@ -5,11 +5,15 @@ import App from './App'
 import './styles/globals.css'
 import './styles/markdown.css'
 
-interface AppConfig { theme: string }
+interface AppConfig {
+  theme: string
+}
 
-invoke<AppConfig>('get_config').then((c) => {
-  document.documentElement.setAttribute('data-theme', c.theme || 'dark')
-}).catch(() => {})
+invoke<AppConfig>('get_config')
+  .then((c) => {
+    document.documentElement.setAttribute('data-theme', c.theme || 'dark')
+  })
+  .catch(() => {})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

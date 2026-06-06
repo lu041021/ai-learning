@@ -3,26 +3,31 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
+
+fn to_json(v: &impl serde::Serialize) -> Result<String, String> {
+    serde_json::to_string_pretty(v).map_err(|e| e.to_string())
+}
+
+fn arg_i64(args: &Value, key: &str, default: i64) -> i64 {
+    args.get(key).and_then(|v| v.as_i64()).unwrap_or(default)
+}
+
 use tiny_http::{Header, Method, Response, Server};
 
 use crate::config::{get_app_data_dir, load_config};
-use crate::services::llm_client::{LlmClient, LlmProvider};
-use crate::services::search;
-use crate::services::knowledge_graph;
-use crate::services::recommendation;
 use crate::services::analytics;
+use crate::services::knowledge_graph;
+use crate::services::llm_client::{LlmClient, LlmProvider};
+use crate::services::recommendation;
+use crate::services::search;
 
 type McpResponse = Response<Cursor<Vec<u8>>>;
 
 fn json_response(data: Value) -> McpResponse {
     let body = data.to_string();
     Response::from_string(body)
-        .with_header(
-            Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
-        )
-        .with_header(
-            Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"http://127.0.0.1:1420"[..]).unwrap(),
-        )
+        .with_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
+        .with_header(Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap())
 }
 
 fn read_body(request: &mut tiny_http::Request) -> Result<Value, McpResponse> {
@@ -50,21 +55,22 @@ fn handle_mcp_request(
         Err(resp) => return resp,
     };
 
-    let method = req_body.get("method").and_then(|m| m.as_str()).unwrap_or("");
+    let method = req_body
+        .get("method")
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
     let id = req_body.get("id").cloned().unwrap_or(Value::Null);
     let params = req_body.get("params").cloned().unwrap_or(json!({}));
 
     match method {
-        "initialize" => {
-            json_response(json!({
-                "jsonrpc":"2.0","id":id,
-                "result":{
-                    "protocolVersion":"2024-11-05",
-                    "capabilities":{"tools":{},"resources":{}},
-                    "serverInfo":{"name":"ai-learning-platform","version":"1.0.0"}
-                }
-            }))
-        }
+        "initialize" => json_response(json!({
+            "jsonrpc":"2.0","id":id,
+            "result":{
+                "protocolVersion":"2024-11-05",
+                "capabilities":{"tools":{},"resources":{}},
+                "serverInfo":{"name":"ai-learning-platform","version":"1.0.0"}
+            }
+        })),
         "notifications/initialized" => json_response(json!({"jsonrpc":"2.0","id":id,"result":{}})),
         "tools/list" => handle_tools_list(id),
         "tools/call" => handle_tools_call(id, &params, db),
@@ -84,112 +90,112 @@ fn handle_tools_list(id: Value) -> McpResponse {
         "result":{"tools":[
             {
                 "name":"list_courses",
-                "description":"List all courses in the learning platform. Returns course id, title, slug, and description.",
+                "description":"列出学习平台中的所有课程，返回课程 ID、标题、slug 和描述。",
                 "inputSchema":{"type":"object","properties":{},"required":[]}
             },
             {
                 "name":"get_course",
-                "description":"Get course detail by slug, including all chapters and lessons.",
+                "description":"根据 slug 获取课程详情，包括所有章节和课时。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"slug":{"type":"string","description":"Course slug (URL-friendly identifier)"}},
+                    "properties":{"slug":{"type":"string","description":"课程 slug（URL 友好标识）"}},
                     "required":["slug"]
                 }
             },
             {
                 "name":"get_lesson",
-                "description":"Get full lesson content by lesson ID. Returns title, markdown content, chapter_id, and order_index.",
+                "description":"根据课时 ID 获取完整课时内容，返回标题、Markdown 内容、章节 ID 和排序索引。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"lesson_id":{"type":"integer","description":"Lesson ID"}},
+                    "properties":{"lesson_id":{"type":"integer","description":"课时 ID"}},
                     "required":["lesson_id"]
                 }
             },
             {
                 "name":"get_progress",
-                "description":"Get user learning progress: completed lesson IDs and quiz scores.",
+                "description":"获取用户学习进度：已完成课时 ID 和测验分数。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             },
             {
                 "name":"get_dashboard",
-                "description":"Get full dashboard data: total/completed lessons, quiz stats, skill radar, course progress, calendar heatmap, knowledge tree.",
+                "description":"获取完整仪表盘数据：总课时/已完成课时、测验统计、技能雷达、课程进度、日历热力图、知识树。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             },
             {
                 "name":"search_courses",
-                "description":"Search courses by title keyword.",
+                "description":"按标题关键词搜索课程。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"query":{"type":"string","description":"Search keyword"}},
+                    "properties":{"query":{"type":"string","description":"搜索关键词"}},
                     "required":["query"]
                 }
             },
             {
                 "name":"import_url",
-                "description":"Import a URL as a new course. Fetches content, uses AI to structure it into chapters/lessons/quizzes. Requires Anthropic API key configured in the app.",
+                "description":"导入 URL 作为新课程。获取内容，使用 AI 将其组织为章节/课时/测验。需要在应用中配置 API 密钥。",
                 "inputSchema":{
                     "type":"object",
                     "properties":{
-                        "url":{"type":"string","description":"URL to import"},
-                        "api_key":{"type":"string","description":"Anthropic API key (optional, uses app config if not provided)"},
-                        "model":{"type":"string","description":"Model to use (optional, defaults to app config)"}
+                        "url":{"type":"string","description":"要导入的 URL"},
+                        "api_key":{"type":"string","description":"API 密钥（可选，未提供时使用应用配置）"},
+                        "model":{"type":"string","description":"使用的模型（可选，默认使用应用配置）"}
                     },
                     "required":["url"]
                 }
             },
             {
                 "name":"get_learning_path",
-                "description":"Get the user's personalized learning path with recommended courses and milestones.",
+                "description":"获取用户个性化学习路线，包含推荐课程和里程碑。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             },
             {
                 "name":"semantic_search",
-                "description":"Full-text search across courses, lessons, and quiz questions. Returns ranked results with highlighted snippets.",
+                "description":"跨课程、课时和测验题目进行全文搜索，返回带高亮片段的排序结果。",
                 "inputSchema":{
                     "type":"object",
                     "properties":{
-                        "query":{"type":"string","description":"Search query"},
-                        "limit":{"type":"integer","description":"Max results (default: 20)"}
+                        "query":{"type":"string","description":"搜索查询"},
+                        "limit":{"type":"integer","description":"最大结果数（默认 20）"}
                     },
                     "required":["query"]
                 }
             },
             {
                 "name":"get_knowledge_graph",
-                "description":"Get the knowledge graph with AI concepts, their relationships, and user mastery overlay.",
+                "description":"获取知识图谱，包含 AI 概念、概念关联和用户掌握情况叠加。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             },
             {
                 "name":"get_recommendations",
-                "description":"Get personalized course recommendations based on user interests, progress, and learning profile.",
+                "description":"基于用户兴趣、学习进度和学习画像获取个性化课程推荐。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             },
             {
                 "name":"get_analytics",
-                "description":"Get advanced learning analytics: completion rate, accuracy trends, study streaks, domain mastery, and weak areas.",
+                "description":"获取高级学习分析：完成率、正确率趋势、学习连续天数、领域掌握度和薄弱环节。",
                 "inputSchema":{
                     "type":"object",
-                    "properties":{"user_id":{"type":"integer","description":"User ID (defaults to 1)"}},
+                    "properties":{"user_id":{"type":"integer","description":"用户 ID（默认值 1）"}},
                     "required":[]
                 }
             }
@@ -275,11 +281,7 @@ fn handle_resources_list(id: Value, db: &Arc<Mutex<Connection>>) -> McpResponse 
     json_response(json!({"jsonrpc":"2.0","id":id,"result":{"resources":resources}}))
 }
 
-fn handle_resources_read(
-    id: Value,
-    params: &Value,
-    db: &Arc<Mutex<Connection>>,
-) -> McpResponse {
+fn handle_resources_read(id: Value, params: &Value, db: &Arc<Mutex<Connection>>) -> McpResponse {
     let uri = params.get("uri").and_then(|u| u.as_str()).unwrap_or("");
 
     let result = if uri == "courses://list" {
@@ -328,7 +330,7 @@ fn tool_list_courses(db: &Arc<Mutex<Connection>>) -> Result<String, String> {
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
+    to_json(&rows)
 }
 
 fn tool_get_course(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
@@ -355,7 +357,9 @@ fn tool_get_course(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, 
         .map_err(|e| format!("Course not found: {}", e))?;
 
     let mut ch_stmt = conn
-        .prepare("SELECT id, title, order_index FROM chapters WHERE course_id = ?1 ORDER BY order_index")
+        .prepare(
+            "SELECT id, title, order_index FROM chapters WHERE course_id = ?1 ORDER BY order_index",
+        )
         .map_err(|e| e.to_string())?;
     let course_id = course.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -396,7 +400,7 @@ fn tool_get_course(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, 
         "course": course,
         "chapters": chapters
     });
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+    to_json(&result)
 }
 
 fn tool_get_lesson(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
@@ -429,11 +433,11 @@ fn tool_get_lesson(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, 
         )
         .map_err(|e| format!("Lesson not found: {}", e))?;
 
-    serde_json::to_string_pretty(&lesson).map_err(|e| e.to_string())
+    to_json(&lesson)
 }
 
 fn tool_get_progress(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
 
     let conn = db.lock().map_err(|e| e.to_string())?;
 
@@ -466,11 +470,11 @@ fn tool_get_progress(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String
         "completed_count": completed_lesson_ids.len(),
         "quiz_scores": quiz_scores
     });
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+    to_json(&result)
 }
 
 fn tool_get_dashboard(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
 
     let conn = db.lock().map_err(|e| e.to_string())?;
 
@@ -550,7 +554,7 @@ fn tool_get_dashboard(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Strin
         "avg_quiz_score": format!("{:.1}%", avg_score * 100.0),
         "course_progress": course_progress
     });
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+    to_json(&result)
 }
 
 fn tool_search_courses(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
@@ -576,7 +580,7 @@ fn tool_search_courses(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Stri
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-    serde_json::to_string_pretty(&rows).map_err(|e| e.to_string())
+    to_json(&rows)
 }
 
 fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
@@ -590,19 +594,32 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
     let db = Arc::clone(_db);
 
     // Read config for API key
-    let api_key = args.get("api_key").and_then(|k| k.as_str()).map(|s| s.to_string());
-    let model = args.get("model").and_then(|m| m.as_str()).map(|s| s.to_string());
+    let api_key = args
+        .get("api_key")
+        .and_then(|k| k.as_str())
+        .map(|s| s.to_string());
+    let model = args
+        .get("model")
+        .and_then(|m| m.as_str())
+        .map(|s| s.to_string());
 
     // Try to use provided key, then fall back to config
     let (key, selected_model, provider_str) = match (api_key.clone(), model.clone()) {
         (Some(k), Some(m)) => (k, m, "anthropic".to_string()),
-        (Some(k), None) => (k, "claude-sonnet-4-20250514".to_string(), "anthropic".to_string()),
+        (Some(k), None) => (
+            k,
+            "claude-sonnet-4-20250514".to_string(),
+            "anthropic".to_string(),
+        ),
         (None, _) => {
             let app_data_dir = get_app_data_dir()?;
             let cfg_path = crate::config::config_path(&app_data_dir);
             let config = load_config(&cfg_path);
             if config.api_key.is_empty() {
-                return Err("No API key configured. Set it in app Settings or pass api_key parameter.".to_string());
+                return Err(
+                    "No API key configured. Set it in app Settings or pass api_key parameter."
+                        .to_string(),
+                );
             }
             let m = model.unwrap_or(config.model);
             let p = config.api_provider.clone();
@@ -619,21 +636,22 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
     })?;
 
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let import_result = crate::services::course_importer::insert_course_to_db(&conn, &result, &url)?;
+    let import_result =
+        crate::services::course_importer::insert_course_to_db(&conn, &result, &url)?;
     drop(conn);
 
-    serde_json::to_string_pretty(&json!({
+    to_json(&json!({
         "course_id": import_result.course_id,
         "course_title": import_result.course_title,
         "course_slug": import_result.course_slug,
         "chapters_count": import_result.chapters_count,
         "lessons_count": import_result.lessons_count,
         "quiz_count": import_result.quiz_count
-    })).map_err(|e| e.to_string())
+    }))
 }
 
 fn tool_get_learning_path(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
 
     let conn = db.lock().map_err(|e| e.to_string())?;
     let path: Option<String> = conn
@@ -646,7 +664,10 @@ fn tool_get_learning_path(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<S
 
     match path {
         Some(data) => Ok(data),
-        None => Ok(json!({"message":"No learning path generated yet. Use the app to generate one first."}).to_string()),
+        None => Ok(
+            json!({"message":"No learning path generated yet. Use the app to generate one first."})
+                .to_string(),
+        ),
     }
 }
 
@@ -672,25 +693,25 @@ fn tool_semantic_search(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Str
             })
         })
         .collect();
-    serde_json::to_string_pretty(&json_results).map_err(|e| e.to_string())
+    to_json(&json_results)
 }
 
 fn tool_get_knowledge_graph(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
     let data = knowledge_graph::build_knowledge_graph(db, user_id)?;
-    serde_json::to_string_pretty(&data).map_err(|e| e.to_string())
+    to_json(&data)
 }
 
 fn tool_get_recommendations(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
     let data = recommendation::get_recommendations(db, user_id)?;
-    serde_json::to_string_pretty(&data).map_err(|e| e.to_string())
+    to_json(&data)
 }
 
 fn tool_get_analytics(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
-    let user_id = args.get("user_id").and_then(|v| v.as_i64()).unwrap_or(1);
+    let user_id = arg_i64(args, "user_id", 1);
     let data = analytics::get_analytics(db, user_id)?;
-    serde_json::to_string_pretty(&data).map_err(|e| e.to_string())
+    to_json(&data)
 }
 
 // ─── Public API ───
@@ -717,11 +738,25 @@ pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16) {
             } else if method == Method::Get && path == "/health" {
                 let _ = request.respond(Response::from_string("ok"));
             } else if method == Method::Options {
-                // CORS preflight — allow local origins only
+                // CORS preflight — allow local origins
                 let resp = Response::from_string("")
-                    .with_header(Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"http://127.0.0.1:1420"[..]).unwrap())
-                    .with_header(Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"POST, GET, OPTIONS"[..]).unwrap())
-                    .with_header(Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap());
+                    .with_header(
+                        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
+                    )
+                    .with_header(
+                        Header::from_bytes(
+                            &b"Access-Control-Allow-Methods"[..],
+                            &b"POST, GET, OPTIONS"[..],
+                        )
+                        .unwrap(),
+                    )
+                    .with_header(
+                        Header::from_bytes(
+                            &b"Access-Control-Allow-Headers"[..],
+                            &b"Content-Type"[..],
+                        )
+                        .unwrap(),
+                    );
                 let _ = request.respond(resp);
             } else {
                 let _ = request.respond(Response::from_string("Not Found").with_status_code(404));

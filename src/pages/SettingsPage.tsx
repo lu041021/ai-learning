@@ -21,7 +21,10 @@ const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
-const PROVIDER_KEY_LABELS: Record<string, { label: string; placeholder: string; link: string; linkText: string }> = {
+const PROVIDER_KEY_LABELS: Record<
+  string,
+  { label: string; placeholder: string; link: string; linkText: string }
+> = {
   anthropic: {
     label: 'Anthropic API Key',
     placeholder: 'sk-ant-api03-...',
@@ -56,14 +59,20 @@ export function SettingsPage() {
 
   useEffect(() => {
     document.title = '设置 - AI 学堂'
-    api.getConfig().then((c) => {
-      const key = c.api_key || ''
-      setApiKey(key)
-      setModel(c.model || models[0]?.value || '')
-      setTheme(c.theme || 'dark')
-      setApiProvider(c.api_provider || 'anthropic')
-      setLoaded(true)
-    }).catch(() => toast.error('加载配置失败'))
+    api
+      .getConfig()
+      .then((c) => {
+        const key = c.api_key || ''
+        setApiKey(key)
+        setModel(c.model || models[0]?.value || '')
+        setTheme(c.theme || 'dark')
+        setApiProvider(c.api_provider || 'anthropic')
+        setLoaded(true)
+      })
+      .catch(() => {
+        setLoaded(true)
+        toast.error('加载配置失败')
+      })
   }, [])
 
   const handleSave = async () => {
@@ -86,7 +95,12 @@ export function SettingsPage() {
 
   const handleClearData = async () => {
     if (!userId) return
-    if (!window.confirm('确定要清除所有学习数据吗？\n\n这将删除：\n- 学习进度\n- 测验记录\n- 对话历史\n\n此操作不可恢复！')) return
+    if (
+      !window.confirm(
+        '确定要清除所有学习数据吗？\n\n这将删除：\n- 学习进度\n- 测验记录\n- 对话历史\n\n此操作不可恢复！',
+      )
+    )
+      return
     setClearing(true)
     try {
       await api.clearUserData(userId)
@@ -102,22 +116,47 @@ export function SettingsPage() {
   if (!loaded) {
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>加载中...</div>
+        <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>
+          加载中...
+        </div>
       </div>
     )
   }
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-      <Link to="/" style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px', display: 'inline-block' }}>
+      <Link
+        to="/"
+        style={{
+          fontSize: '14px',
+          color: 'var(--text-secondary)',
+          marginBottom: '20px',
+          display: 'inline-block',
+        }}
+      >
         &larr; 返回首页
       </Link>
 
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>设置</h1>
 
       <div style={{ display: 'grid', gap: '20px' }}>
-        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '24px',
+          }}
+        >
+          <label
+            style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              marginBottom: '8px',
+              color: 'var(--text-primary)',
+            }}
+          >
             API 提供商
           </label>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
@@ -130,7 +169,7 @@ export function SettingsPage() {
               setApiProvider(newProvider)
               setCustomModel('')
               const newModels = PROVIDER_MODELS[newProvider] || PROVIDER_MODELS.anthropic
-              const isCurrentModelValid = newModels.some(m => m.value === model)
+              const isCurrentModelValid = newModels.some((m) => m.value === model)
               if (!isCurrentModelValid && customModel === '') {
                 setModel(newModels[0]?.value || '')
               }
@@ -148,18 +187,38 @@ export function SettingsPage() {
             }}
           >
             {PROVIDERS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
             ))}
           </select>
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '24px',
+          }}
+        >
+          <label
+            style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              marginBottom: '8px',
+              color: 'var(--text-primary)',
+            }}
+          >
             {keyInfo.label}
           </label>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
             用于 AI 导师和测验评分功能。可在{' '}
-            <a href={keyInfo.link} target="_blank" rel="noopener noreferrer">{keyInfo.linkText}</a> 获取。
+            <a href={keyInfo.link} target="_blank" rel="noopener noreferrer">
+              {keyInfo.linkText}
+            </a>{' '}
+            获取。
           </p>
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
@@ -195,12 +254,28 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '24px',
+          }}
+        >
+          <label
+            style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              marginBottom: '8px',
+              color: 'var(--text-primary)',
+            }}
+          >
             模型
           </label>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-            选择 {PROVIDERS.find(p => p.value === apiProvider)?.label} 使用的模型。功能越强费用越高。
+            选择 {PROVIDERS.find((p) => p.value === apiProvider)?.label}{' '}
+            使用的模型。功能越强费用越高。
           </p>
           <select
             value={customModel ? '__custom__' : model}
@@ -226,11 +301,13 @@ export function SettingsPage() {
             }}
           >
             {models.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
             ))}
             <option value="__custom__">自定义模型...</option>
           </select>
-          {(!models.some(m => m.value === model) || customModel !== '') && (
+          {(!models.some((m) => m.value === model) || customModel !== '') && (
             <input
               type="text"
               value={customModel || model}
@@ -255,8 +332,23 @@ export function SettingsPage() {
           )}
         </div>
 
-        <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: '24px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '24px',
+          }}
+        >
+          <label
+            style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: 600,
+              marginBottom: '8px',
+              color: 'var(--text-primary)',
+            }}
+          >
             主题
           </label>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
@@ -312,7 +404,16 @@ export function SettingsPage() {
         </button>
 
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px', color: 'var(--danger)' }}>危险区域</h2>
+          <h2
+            style={{
+              fontSize: '16px',
+              fontWeight: 600,
+              marginBottom: '12px',
+              color: 'var(--danger)',
+            }}
+          >
+            危险区域
+          </h2>
           <button
             onClick={handleClearData}
             disabled={clearing}

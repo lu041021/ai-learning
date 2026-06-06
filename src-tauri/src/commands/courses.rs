@@ -23,11 +23,15 @@ pub fn list_courses(db: State<'_, Arc<Mutex<Connection>>>) -> Result<Vec<CourseS
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_course(slug: String, db: State<'_, Arc<Mutex<Connection>>>) -> Result<CourseDetail, String> {
+pub fn get_course(
+    slug: String,
+    db: State<'_, Arc<Mutex<Connection>>>,
+) -> Result<CourseDetail, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
     let course = conn
@@ -46,7 +50,9 @@ pub fn get_course(slug: String, db: State<'_, Arc<Mutex<Connection>>>) -> Result
         .map_err(|e| format!("Course not found: {}", e))?;
 
     let mut ch_stmt = conn
-        .prepare("SELECT id, title, order_index FROM chapters WHERE course_id = ?1 ORDER BY order_index")
+        .prepare(
+            "SELECT id, title, order_index FROM chapters WHERE course_id = ?1 ORDER BY order_index",
+        )
         .map_err(|e| e.to_string())?;
     let chapters: Vec<(i64, String, i64)> = ch_stmt
         .query_map(rusqlite::params![course.0], |row| {
@@ -115,10 +121,7 @@ pub fn get_lesson(
 }
 
 #[tauri::command]
-pub fn get_quiz(
-    lesson_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<QuizOut, String> {
+pub fn get_quiz(lesson_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> Result<QuizOut, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
     let (quiz_id, quiz_title) = conn
@@ -130,7 +133,9 @@ pub fn get_quiz(
         .map_err(|e| format!("Quiz not found: {}", e))?;
 
     let mut q_stmt = conn
-        .prepare("SELECT id, question_text, options, explanation FROM quiz_questions WHERE quiz_id = ?1")
+        .prepare(
+            "SELECT id, question_text, options, explanation FROM quiz_questions WHERE quiz_id = ?1",
+        )
         .map_err(|e| e.to_string())?;
     let questions: Vec<QuizQuestionOut> = q_stmt
         .query_map(rusqlite::params![quiz_id], |row| {

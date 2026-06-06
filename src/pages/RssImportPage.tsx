@@ -30,6 +30,7 @@ export function RssImportPage() {
   const [importErrors, setImportErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
+    document.title = 'RSS 订阅 - AI 学堂'
     loadSubscriptions()
   }, [])
 
@@ -113,7 +114,7 @@ export function RssImportPage() {
     }
 
     try {
-      const result = await api.importFeedArticle(article.url)
+      const result = await api.importFromUrl(article.url)
       setImportedSlugs((prev) => ({ ...prev, [article.url]: result.course_slug }))
     } catch (e) {
       setImportErrors((prev) => ({ ...prev, [article.url]: String(e) }))
@@ -122,9 +123,7 @@ export function RssImportPage() {
   }
 
   const handleBatchImport = async () => {
-    const unimported = articles.filter(
-      (a) => !importedSlugs[a.url] && !importErrors[a.url]
-    )
+    const unimported = articles.filter((a) => !importedSlugs[a.url] && !importErrors[a.url])
     for (const article of unimported) {
       await handleImportArticle(article)
     }
@@ -139,33 +138,49 @@ export function RssImportPage() {
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>RSS 订阅导入</h1>
 
       {/* Subscribe Section */}
-      <div style={{
-        background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--border)', padding: '20px', marginBottom: '20px',
-      }}>
+      <div
+        style={{
+          background: 'var(--bg-secondary)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
+          padding: '20px',
+          marginBottom: '20px',
+        }}
+      >
         <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
           <input
             type="url"
             placeholder="粘贴 RSS/Atom 订阅地址..."
             value={feedUrl}
-            onChange={(e) => { setFeedUrl(e.target.value); setSubscribeError('') }}
+            onChange={(e) => {
+              setFeedUrl(e.target.value)
+              setSubscribeError('')
+            }}
             onKeyDown={handleSubscribeKeyDown}
             disabled={subscribePhase === 'loading'}
             style={{
-              flex: 1, padding: '10px 14px',
-              borderRadius: 'var(--radius)', border: '1px solid var(--border)',
-              background: 'var(--bg-primary)', color: 'var(--text-primary)',
-              fontSize: '14px', outline: 'none',
+              flex: 1,
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              fontSize: '14px',
+              outline: 'none',
             }}
           />
           <button
             onClick={() => handleSubscribe()}
             disabled={!feedUrl.trim() || subscribePhase === 'loading'}
             style={{
-              padding: '10px 24px', borderRadius: 'var(--radius)',
-              border: 'none', background: feedUrl.trim() ? 'var(--accent)' : 'var(--bg-tertiary)',
+              padding: '10px 24px',
+              borderRadius: 'var(--radius)',
+              border: 'none',
+              background: feedUrl.trim() ? 'var(--accent)' : 'var(--bg-tertiary)',
               color: feedUrl.trim() ? '#fff' : 'var(--text-muted)',
-              fontSize: '14px', fontWeight: 600, cursor: feedUrl.trim() ? 'pointer' : 'not-allowed',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: feedUrl.trim() ? 'pointer' : 'not-allowed',
               whiteSpace: 'nowrap',
             }}
           >
@@ -174,13 +189,19 @@ export function RssImportPage() {
         </div>
 
         {subscribePhase === 'loading' && (
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>订阅中...</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            订阅中...
+          </div>
         )}
         {subscribeError && (
-          <div style={{ fontSize: '13px', color: 'var(--error)', marginBottom: '8px' }}>{subscribeError}</div>
+          <div style={{ fontSize: '13px', color: 'var(--error)', marginBottom: '8px' }}>
+            {subscribeError}
+          </div>
         )}
 
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>预设订阅源:</div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          预设订阅源:
+        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
           {PRESETS.map((p) => (
             <button
@@ -188,9 +209,13 @@ export function RssImportPage() {
               onClick={() => handleSubscribe(p.url)}
               disabled={subscribePhase === 'loading'}
               style={{
-                padding: '5px 12px', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border)', background: 'var(--bg-primary)',
-                color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer',
+                padding: '5px 12px',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--border)',
+                background: 'var(--bg-primary)',
+                color: 'var(--text-secondary)',
+                fontSize: '12px',
+                cursor: 'pointer',
               }}
             >
               {p.label}
@@ -202,13 +227,27 @@ export function RssImportPage() {
       {/* Two-column layout */}
       <div style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 340px)' }}>
         {/* Left: Subscriptions */}
-        <div style={{
-          width: '280px', flexShrink: 0,
-          background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)', padding: '16px',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            width: '280px',
+            flexShrink: 0,
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '14px',
+              fontWeight: 600,
+              marginBottom: '12px',
+              color: 'var(--text-primary)',
+            }}
+          >
             我的订阅 ({subscriptions.length})
           </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
@@ -217,35 +256,66 @@ export function RssImportPage() {
                 key={sub.id}
                 onClick={() => handleSelectSub(sub)}
                 style={{
-                  padding: '10px 12px', borderRadius: 'var(--radius)',
-                  border: selectedSub?.id === sub.id ? '1px solid var(--accent)' : '1px solid transparent',
-                  background: selectedSub?.id === sub.id ? 'var(--accent-light)' : 'var(--bg-primary)',
-                  marginBottom: '6px', cursor: 'pointer',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius)',
+                  border:
+                    selectedSub?.id === sub.id
+                      ? '1px solid var(--accent)'
+                      : '1px solid transparent',
+                  background:
+                    selectedSub?.id === sub.id ? 'var(--accent-light)' : 'var(--bg-primary)',
+                  marginBottom: '6px',
+                  cursor: 'pointer',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                  }}
+                >
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      marginBottom: '2px',
-                    }}>
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: 'var(--text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        marginBottom: '2px',
+                      }}
+                    >
                       {sub.feed_title || new URL(sub.feed_url).hostname}
                     </div>
-                    <div style={{
-                      fontSize: '11px', color: 'var(--text-muted)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {sub.feed_url}
                     </div>
                   </div>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleUnsubscribe(sub.id) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleUnsubscribe(sub.id)
+                    }}
                     style={{
-                      flexShrink: 0, marginLeft: '8px',
-                      padding: '2px 6px', borderRadius: '4px',
-                      border: 'none', background: 'transparent',
-                      color: 'var(--text-muted)', fontSize: '16px', cursor: 'pointer',
+                      flexShrink: 0,
+                      marginLeft: '8px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-muted)',
+                      fontSize: '16px',
+                      cursor: 'pointer',
                       lineHeight: 1,
                     }}
                     title="取消订阅"
@@ -256,7 +326,14 @@ export function RssImportPage() {
               </div>
             ))}
             {subscriptions.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '20px',
+                  color: 'var(--text-muted)',
+                  fontSize: '13px',
+                }}
+              >
                 暂无订阅，粘贴 RSS 地址或点击预设源开始
               </div>
             )}
@@ -264,53 +341,95 @@ export function RssImportPage() {
         </div>
 
         {/* Right: Articles */}
-        <div style={{
-          flex: 1,
-          background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)', padding: '16px',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}>
+        <div
+          style={{
+            flex: 1,
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           {articlesPhase === 'idle' && !selectedSub && (
-            <div style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-muted)', fontSize: '14px',
-            }}>
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '14px',
+              }}
+            >
               选择左侧订阅源查看文章列表
             </div>
           )}
 
           {articlesPhase === 'loading' && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{
-                width: '24px', height: '24px',
-                border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
-                borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-              }} />
+            <div
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  border: '3px solid var(--border)',
+                  borderTopColor: 'var(--accent)',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
             </div>
           )}
 
           {articlesError && (
-            <div style={{
-              padding: '12px', borderRadius: 'var(--radius)',
-              background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--error)',
-              fontSize: '13px', color: 'var(--error)',
-            }}>
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: 'var(--radius)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid var(--error)',
+                fontSize: '13px',
+                color: 'var(--error)',
+              }}
+            >
               {articlesError}
             </div>
           )}
 
           {selectedSub && articlesPhase === 'idle' && (
             <>
-              <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>{selectedSub.feed_title || selectedSub.feed_url} ({articles.length} 篇文章)</span>
-                {articles.filter((a) => !importedSlugs[a.url] && !importErrors[a.url]).length > 0 && (
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  marginBottom: '12px',
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>
+                  {selectedSub.feed_title || selectedSub.feed_url} ({articles.length} 篇文章)
+                </span>
+                {articles.filter((a) => !importedSlugs[a.url] && !importErrors[a.url]).length >
+                  0 && (
                   <button
                     onClick={handleBatchImport}
                     disabled={importingUrl !== null}
                     style={{
-                      padding: '4px 12px', borderRadius: 'var(--radius)',
-                      border: '1px solid var(--accent)', background: 'transparent',
-                      color: 'var(--accent)', fontSize: '12px', fontWeight: 500, cursor: 'pointer',
+                      padding: '4px 12px',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid var(--accent)',
+                      background: 'transparent',
+                      color: 'var(--accent)',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
                     }}
                   >
                     批量导入全部
@@ -327,45 +446,87 @@ export function RssImportPage() {
                     <div
                       key={article.url}
                       style={{
-                        padding: '12px', borderRadius: 'var(--radius)',
-                        border: '1px solid var(--border)', background: 'var(--bg-primary)',
+                        padding: '12px',
+                        borderRadius: 'var(--radius)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-primary)',
                         marginBottom: '8px',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                        }}
+                      >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)',
-                            marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
+                          <div
+                            style={{
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                              marginBottom: '4px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             {article.title || '(无标题)'}
                           </div>
                           {article.description && (
-                            <div style={{
-                              fontSize: '12px', color: 'var(--text-secondary)',
-                              marginBottom: '6px', lineHeight: 1.5,
-                              overflow: 'hidden', display: '-webkit-box',
-                              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                            }}>
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                color: 'var(--text-secondary)',
+                                marginBottom: '6px',
+                                lineHeight: 1.5,
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
                               {article.description.replace(/<[^>]*>/g, '').slice(0, 200)}
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '12px',
+                              fontSize: '11px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
                             {article.author && <span>{article.author}</span>}
                             {article.published_at && (
-                              <span>{new Date(article.published_at).toLocaleDateString('zh-CN')}</span>
+                              <span>
+                                {new Date(article.published_at).toLocaleDateString('zh-CN')}
+                              </span>
                             )}
                           </div>
                         </div>
-                        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <div
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: '4px',
+                          }}
+                        >
                           {slug ? (
                             <Link
                               to={`/courses/${slug}`}
                               style={{
-                                padding: '6px 14px', borderRadius: 'var(--radius)',
-                                background: 'var(--success)', color: '#fff',
-                                fontSize: '12px', fontWeight: 600, textDecoration: 'none',
+                                padding: '6px 14px',
+                                borderRadius: 'var(--radius)',
+                                background: 'var(--success)',
+                                color: '#fff',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                textDecoration: 'none',
                                 whiteSpace: 'nowrap',
                               }}
                             >
@@ -376,9 +537,14 @@ export function RssImportPage() {
                               onClick={() => handleImportArticle(article)}
                               disabled={isImporting}
                               style={{
-                                padding: '6px 14px', borderRadius: 'var(--radius)',
-                                border: 'none', background: 'var(--accent)', color: '#fff',
-                                fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                                padding: '6px 14px',
+                                borderRadius: 'var(--radius)',
+                                border: 'none',
+                                background: 'var(--accent)',
+                                color: '#fff',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
                                 whiteSpace: 'nowrap',
                               }}
                             >
@@ -386,11 +552,16 @@ export function RssImportPage() {
                             </button>
                           )}
                           {error && (
-                            <div style={{
-                              fontSize: '11px',
-                              color: error.startsWith('已导入') ? 'var(--warning)' : 'var(--error)',
-                              maxWidth: '150px', textAlign: 'right',
-                            }}>
+                            <div
+                              style={{
+                                fontSize: '11px',
+                                color: error.startsWith('已导入')
+                                  ? 'var(--warning)'
+                                  : 'var(--error)',
+                                maxWidth: '150px',
+                                textAlign: 'right',
+                              }}
+                            >
                               {error.length > 40 ? error.slice(0, 40) + '...' : error}
                             </div>
                           )}
@@ -400,7 +571,14 @@ export function RssImportPage() {
                   )
                 })}
                 {articles.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '20px',
+                      color: 'var(--text-muted)',
+                      fontSize: '13px',
+                    }}
+                  >
                     该订阅源暂无文章
                   </div>
                 )}

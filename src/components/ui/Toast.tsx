@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { create } from 'zustand'
 
 export interface ToastItem {
@@ -39,18 +40,25 @@ export function ToastContainer() {
   if (toasts.length === 0) return null
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: '16px',
-      right: '16px',
-      zIndex: 9999,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '8px',
-      pointerEvents: 'none',
-    }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: '16px',
+        right: '16px',
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        pointerEvents: 'none',
+      }}
+    >
       {toasts.map((t) => {
-        const bg = t.type === 'error' ? 'var(--danger)' : t.type === 'success' ? 'var(--success)' : 'var(--accent)'
+        const bg =
+          t.type === 'error'
+            ? 'var(--danger)'
+            : t.type === 'success'
+              ? 'var(--success)'
+              : 'var(--accent)'
         return (
           <div
             key={t.id}

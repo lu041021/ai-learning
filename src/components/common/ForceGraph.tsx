@@ -23,7 +23,6 @@ export function ForceGraph({ nodes, edges, positions, onNodeClick, selectedNodeI
   const width = maxX - minX
   const height = maxY - minY
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
   const nodeIndex = new Map(nodes.map((n, i) => [n.id, i]))
 
   const getRadius = (node: ConceptNode) => 18 + node.lessonCount * 5
@@ -48,10 +47,7 @@ export function ForceGraph({ nodes, edges, positions, onNodeClick, selectedNodeI
   }
 
   return (
-    <svg
-      viewBox={`${minX} ${minY} ${width} ${height}`}
-      style={{ width: '100%', height: '100%' }}
-    >
+    <svg viewBox={`${minX} ${minY} ${width} ${height}`} style={{ width: '100%', height: '100%' }}>
       {/* Edges */}
       {edges.map((e) => {
         const si = nodeIndex.get(e.sourceId)
@@ -77,7 +73,7 @@ export function ForceGraph({ nodes, edges, positions, onNodeClick, selectedNodeI
       {nodes.map((node, i) => {
         const r = getRadius(node)
         const isFocused = hoveredId === node.id || selectedNodeId === node.id
-        const isDimmed = (connectedNodeIds.size > 0) && !connectedNodeIds.has(node.id) && !isFocused
+        const isDimmed = connectedNodeIds.size > 0 && !connectedNodeIds.has(node.id) && !isFocused
 
         return (
           <g
@@ -101,7 +97,9 @@ export function ForceGraph({ nodes, edges, positions, onNodeClick, selectedNodeI
               fontSize={Math.min(13, 10 + node.lessonCount * 0.5)}
               fontWeight={600}
             >
-              {node.completedCount > 0 && node.completedCount === node.lessonCount ? '✓' : node.lessonCount || ''}
+              {node.completedCount > 0 && node.completedCount === node.lessonCount
+                ? '✓'
+                : node.lessonCount || ''}
             </text>
             <text
               textAnchor="middle"

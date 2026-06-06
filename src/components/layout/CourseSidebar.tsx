@@ -19,24 +19,32 @@ export function CourseSidebar() {
   }, [userId, fetchConversations])
 
   useEffect(() => {
-    if (slug) api.getCourse(slug).then(setCourse).catch(() => toast.error('加载课程失败'))
+    if (slug)
+      api
+        .getCourse(slug)
+        .then(setCourse)
+        .catch(() => toast.error('加载课程失败'))
   }, [slug])
 
   return (
-    <aside style={{
-      background: 'var(--bg-secondary)',
-      borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--border)',
+    <aside
+      style={{
+        background: 'var(--bg-secondary)',
+        borderRight: '1px solid var(--border)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <Link to="/" style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>
           AI 学堂
         </Link>
@@ -160,12 +168,18 @@ export function CourseSidebar() {
           }}
         >
           MCP Playground
-          <span style={{
-            marginLeft: '6px', fontSize: '10px', padding: '1px 5px',
-            borderRadius: '6px', background: 'var(--accent-light)', color: 'var(--accent)',
-            fontWeight: 600,
-          }}>
-            NEW
+          <span
+            style={{
+              marginLeft: '6px',
+              fontSize: '10px',
+              padding: '1px 5px',
+              borderRadius: '6px',
+              background: 'var(--accent-light)',
+              color: 'var(--accent)',
+              fontWeight: 600,
+            }}
+          >
+            新
           </span>
         </Link>
         <Link
@@ -219,24 +233,28 @@ export function CourseSidebar() {
 
         {course && (
           <div>
-            <div style={{
-              padding: '4px 20px 8px',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}>
+            <div
+              style={{
+                padding: '4px 20px 8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
               {course.title}
             </div>
             {course.chapters.map((ch) => (
               <div key={ch.id}>
-                <div style={{
-                  padding: '6px 20px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary)',
-                }}>
+                <div
+                  style={{
+                    padding: '6px 20px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
                   {ch.title}
                 </div>
                 {ch.lessons.map((l) => {
@@ -258,17 +276,19 @@ export function CourseSidebar() {
                         fontWeight: isActive ? 500 : 400,
                       }}
                     >
-                      <span style={{
-                        width: '18px',
-                        height: '18px',
-                        borderRadius: '50%',
-                        background: isCompleted ? 'var(--success)' : 'var(--bg-tertiary)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        flexShrink: 0,
-                      }}>
+                      <span
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          background: isCompleted ? 'var(--success)' : 'var(--bg-tertiary)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          flexShrink: 0,
+                        }}
+                      >
                         {isCompleted ? 'v' : ''}
                       </span>
                       {l.title}

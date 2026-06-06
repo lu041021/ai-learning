@@ -1,0 +1,26 @@
+export const courseFixtures = {
+  machineLearning: {
+    id: 1,
+    slug: 'machine-learning',
+    title: 'Machine Learning Basics',
+    description: 'Intro to ML concepts',
+    difficulty: 'beginner',
+    duration_minutes: 120,
+    lesson_count: 3,
+    tags: ['ML', 'AI'],
+    created_at: '2025-01-01',
+    updated_at: '2025-01-02',
+  },
+  deepLearning: {
+    id: 2,
+    slug: 'deep-learning',
+    title: 'Deep Learning',
+    description: 'Neural networks and beyond',
+    difficulty: 'intermediate',
+    duration_minutes: 180,
+    lesson_count: 4,
+    tags: ['DL', 'AI'],
+    created_at: '2025-02-01',
+    updated_at: '2025-02-02',
+  },
+}

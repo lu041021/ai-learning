@@ -87,9 +87,7 @@ pub fn check_duplicate_url(conn: &Connection, url: &str) -> Result<DuplicateChec
     let result = conn.query_row(
         "SELECT id, title FROM courses WHERE source_url = ?1 AND source_url != ''",
         rusqlite::params![url],
-        |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        },
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
     );
 
     match result {
@@ -121,8 +119,13 @@ fn validate_url(url: &str) -> Result<(), String> {
         return Err("Localhost URLs are not allowed".into());
     }
     if host.starts_with("10.")
-        || host.starts_with("172.16.") || host.starts_with("172.17.") || host.starts_with("172.18.")
-        || host.starts_with("172.19.") || host.starts_with("172.2") || host.starts_with("172.30.") || host.starts_with("172.31.")
+        || host.starts_with("172.16.")
+        || host.starts_with("172.17.")
+        || host.starts_with("172.18.")
+        || host.starts_with("172.19.")
+        || host.starts_with("172.2")
+        || host.starts_with("172.30.")
+        || host.starts_with("172.31.")
         || host.starts_with("192.168.")
         || host == "169.254.169.254"
         || host == "0.0.0.0"
@@ -175,7 +178,17 @@ pub fn extract_text_from_html(html: &str) -> String {
     let mut output = String::new();
 
     let selectors = [
-        "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "pre", "code", "blockquote",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "p",
+        "li",
+        "pre",
+        "code",
+        "blockquote",
     ];
 
     for selector_str in &selectors {
@@ -260,11 +273,13 @@ pub async fn ai_structure_course(
         .replace("{source_url}", source_url)
         .replace("{source_text}", source_text);
 
-    let response_text = client.chat(
-        "你是一位专业的课程编辑。你只回复 JSON，不包含 markdown 标记或其他文字。",
-        &user_message,
-        4000,
-    ).await?;
+    let response_text = client
+        .chat(
+            "你是一位专业的课程编辑。你只回复 JSON，不包含 markdown 标记或其他文字。",
+            &user_message,
+            4000,
+        )
+        .await?;
 
     let cleaned = clean_json_response(&response_text);
     serde_json::from_str::<AiCourseOutput>(&cleaned).map_err(|e| {
@@ -303,7 +318,8 @@ pub fn insert_course_to_db(
     ai_course: &AiCourseOutput,
     url: &str,
 ) -> Result<ImportCourseResult, String> {
-    conn.execute("BEGIN", []).map_err(|e| format!("BEGIN: {}", e))?;
+    conn.execute("BEGIN", [])
+        .map_err(|e| format!("BEGIN: {}", e))?;
 
     let result = (|| -> Result<ImportCourseResult, String> {
         let slug_base = slugify(&ai_course.course_title);
@@ -392,7 +408,8 @@ pub fn insert_course_to_db(
 
     match result {
         Ok(r) => {
-            conn.execute("COMMIT", []).map_err(|e| format!("COMMIT: {}", e))?;
+            conn.execute("COMMIT", [])
+                .map_err(|e| format!("COMMIT: {}", e))?;
             Ok(r)
         }
         Err(e) => {
@@ -406,7 +423,13 @@ fn slugify(title: &str) -> String {
     title
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .split('-')
         .filter(|s| !s.is_empty())
@@ -446,4 +469,3 @@ fn clean_json_response(text: &str) -> String {
     }
     t.to_string()
 }
-

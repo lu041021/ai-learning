@@ -120,10 +120,7 @@ pub fn build_knowledge_graph(
     })
 }
 
-fn compute_layout(
-    nodes: &[ConceptNode],
-    edges: &[ConceptEdge],
-) -> Vec<[f64; 2]> {
+fn compute_layout(nodes: &[ConceptNode], edges: &[ConceptEdge]) -> Vec<[f64; 2]> {
     let n = nodes.len();
     if n == 0 {
         return Vec::new();
@@ -243,13 +240,39 @@ mod tests {
     #[test]
     fn test_layout_with_edges() {
         let nodes: Vec<ConceptNode> = vec![
-            ConceptNode { id: 1, name: "A".into(), domain: "cs".into(), lesson_count: 2, completed_count: 0 },
-            ConceptNode { id: 2, name: "B".into(), domain: "cs".into(), lesson_count: 1, completed_count: 0 },
-            ConceptNode { id: 3, name: "C".into(), domain: "ai".into(), lesson_count: 3, completed_count: 1 },
+            ConceptNode {
+                id: 1,
+                name: "A".into(),
+                domain: "cs".into(),
+                lesson_count: 2,
+                completed_count: 0,
+            },
+            ConceptNode {
+                id: 2,
+                name: "B".into(),
+                domain: "cs".into(),
+                lesson_count: 1,
+                completed_count: 0,
+            },
+            ConceptNode {
+                id: 3,
+                name: "C".into(),
+                domain: "ai".into(),
+                lesson_count: 3,
+                completed_count: 1,
+            },
         ];
         let edges = vec![
-            ConceptEdge { source_id: 1, target_id: 2, weight: 0.8 },
-            ConceptEdge { source_id: 2, target_id: 3, weight: 0.5 },
+            ConceptEdge {
+                source_id: 1,
+                target_id: 2,
+                weight: 0.8,
+            },
+            ConceptEdge {
+                source_id: 2,
+                target_id: 3,
+                weight: 0.5,
+            },
         ];
         let positions = compute_layout(&nodes, &edges);
         assert_eq!(positions.len(), 3);

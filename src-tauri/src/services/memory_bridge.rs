@@ -65,17 +65,20 @@ fn build_memory_content(conn: &Connection, user_id: i64) -> String {
 
     let (streak, longest) = {
         let dates: Vec<String> = {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT DISTINCT date(completed_at) FROM user_progress
-                     WHERE user_id = ?1 AND completed = 1 AND completed_at IS NOT NULL
-                     ORDER BY date(completed_at) DESC",
-                )
-                .unwrap();
-            stmt.query_map(rusqlite::params![user_id], |r| r.get(0))
-                .unwrap()
-                .filter_map(|r| r.ok())
-                .collect()
+            let mut stmt = match conn.prepare(
+                "SELECT DISTINCT date(completed_at) FROM user_progress
+                 WHERE user_id = ?1 AND completed = 1 AND completed_at IS NOT NULL
+                 ORDER BY date(completed_at) DESC",
+            ) {
+                Ok(s) => s,
+                Err(_) => return String::new(),
+            };
+            let result: Vec<String> = match stmt.query_map(rusqlite::params![user_id], |r| r.get(0))
+            {
+                Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                Err(_) => return String::new(),
+            };
+            result
         };
         if dates.is_empty() {
             (0i64, 0i64)
@@ -88,16 +91,22 @@ fn build_memory_content(conn: &Connection, user_id: i64) -> String {
                 if prev == cur_date {
                     continue;
                 }
-                let prev_day: i64 = prev[8..].parse().unwrap_or(0);
-                let cur_day: i64 = cur_date[8..].parse().unwrap_or(0);
+                if prev.len() < 10 || cur_date.len() < 10 {
+                    continue;
+                }
+                let prev_day: i64 = prev[8..10].parse().unwrap_or(0);
+                let cur_day: i64 = cur_date[8..10].parse().unwrap_or(0);
                 let prev_month: i64 = prev[5..7].parse().unwrap_or(0);
                 let cur_month: i64 = cur_date[5..7].parse().unwrap_or(0);
                 let prev_year: i64 = prev[..4].parse().unwrap_or(0);
                 let cur_year: i64 = cur_date[..4].parse().unwrap_or(0);
 
-                let consecutive = (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
-                    || (cur_year == prev_year && cur_month == prev_month - 1
-                        && prev_day == 1 && cur_day == 28);
+                let consecutive =
+                    (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
+                        || (cur_year == prev_year
+                            && cur_month == prev_month - 1
+                            && prev_day == 1
+                            && cur_day == 28);
                 if consecutive {
                     cur += 1;
                 } else {
@@ -173,13 +182,13 @@ fn build_course_table(conn: &Connection, user_id: i64) -> String {
         Err(_) => return String::new(),
     };
 
-    let courses: Vec<(String, String, i64, i64)> = stmt
+    let courses: Vec<(String, String, i64, i64)> = match stmt
         .query_map(rusqlite::params![user_id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
-        })
-        .unwrap()
-        .filter_map(|r| r.ok())
-        .collect();
+        }) {
+        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Err(_) => return String::new(),
+    };
 
     courses
         .iter()

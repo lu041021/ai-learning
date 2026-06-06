@@ -2,7 +2,11 @@ use rusqlite::Connection;
 
 use crate::models::imports::{FeedArticle, FeedSubscription};
 
-pub fn subscribe_feed(conn: &Connection, feed_url: &str, feed_title: &str) -> Result<FeedSubscription, String> {
+pub fn subscribe_feed(
+    conn: &Connection,
+    feed_url: &str,
+    feed_title: &str,
+) -> Result<FeedSubscription, String> {
     conn.execute(
         "INSERT OR IGNORE INTO feed_subscriptions (feed_url, feed_title) VALUES (?1, ?2)",
         rusqlite::params![feed_url, feed_title],
@@ -97,8 +101,8 @@ pub async fn fetch_feed_articles(feed_url: &str) -> Result<(String, Vec<FeedArti
         .await
         .map_err(|e| format!("Failed to read feed body: {}", e))?;
 
-    let feed = feed_rs::parser::parse(&body[..])
-        .map_err(|e| format!("Failed to parse feed: {}", e))?;
+    let feed =
+        feed_rs::parser::parse(&body[..]).map_err(|e| format!("Failed to parse feed: {}", e))?;
 
     let feed_title = feed.title.map(|t| t.content).unwrap_or_default();
 
@@ -121,14 +125,8 @@ pub async fn fetch_feed_articles(feed_url: &str) -> Result<(String, Vec<FeedArti
                 .as_ref()
                 .map(|s| s.content.clone())
                 .unwrap_or_default();
-            let published_at = entry
-                .published
-                .or(entry.updated)
-                .map(|d| d.to_rfc3339());
-            let author = entry
-                .authors
-                .first()
-                .map(|a| a.name.clone());
+            let published_at = entry.published.or(entry.updated).map(|d| d.to_rfc3339());
+            let author = entry.authors.first().map(|a| a.name.clone());
 
             FeedArticle {
                 title,

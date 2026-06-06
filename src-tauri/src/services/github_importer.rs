@@ -41,19 +41,10 @@ pub async fn search_awesome_repos(query: &str) -> Result<Vec<AwesomeRepo>, Strin
     let repos: Vec<AwesomeRepo> = items
         .iter()
         .map(|item| AwesomeRepo {
-            full_name: item["full_name"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
-            description: item["description"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
+            full_name: item["full_name"].as_str().unwrap_or("").to_string(),
+            description: item["description"].as_str().unwrap_or("").to_string(),
             stars: item["stargazers_count"].as_i64().unwrap_or(0),
-            url: item["html_url"]
-                .as_str()
-                .unwrap_or("")
-                .to_string(),
+            url: item["html_url"].as_str().unwrap_or("").to_string(),
         })
         .filter(|r| !r.full_name.is_empty())
         .collect();
@@ -61,17 +52,17 @@ pub async fn search_awesome_repos(query: &str) -> Result<Vec<AwesomeRepo>, Strin
     Ok(repos)
 }
 
-pub async fn fetch_awesome_readme_links(owner: &str, repo: &str) -> Result<Vec<AwesomeLink>, String> {
+pub async fn fetch_awesome_readme_links(
+    owner: &str,
+    repo: &str,
+) -> Result<Vec<AwesomeLink>, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent("Mozilla/5.0 (compatible; AI-Learning-Platform/1.0)")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let readme_url = format!(
-        "https://api.github.com/repos/{}/{}/readme",
-        owner, repo
-    );
+    let readme_url = format!("https://api.github.com/repos/{}/{}/readme", owner, repo);
 
     let response = client
         .get(&readme_url)

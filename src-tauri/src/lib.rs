@@ -1,20 +1,28 @@
-mod config;
 mod commands;
-mod db;
-mod models;
-mod services;
+pub mod config;
+pub mod db;
+mod error;
+pub mod models;
+pub mod services;
 
-use tauri::Manager;
 use commands::chat::StreamCancellers;
 use commands::config_cmd::ConfigState;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
         .setup(|app| {
+            config::load_env();
+
             let app_data_dir = config::get_app_data_dir()?;
             let db_path = app_data_dir.join("learning_platform.db");
             let cfg_path = config::config_path(&app_data_dir);
@@ -78,6 +86,10 @@ pub fn run() {
             commands::knowledge_graph::get_knowledge_graph,
             commands::recommendation::get_recommendations,
             commands::analytics::get_analytics,
+            commands::usage_analyzer_cmd::analyze_usage,
+            commands::usage_analyzer_cmd::generate_goal_path,
+            commands::skill_assessment::assess_user_skill_deep,
+            commands::skill_assessment::generate_enriched_learning_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -30,7 +30,8 @@ pub fn list_conversations(
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -52,7 +53,8 @@ pub fn get_messages(
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -149,7 +151,6 @@ pub async fn send_chat(
                 "chat-token",
                 json!({"token": no_key_msg, "conversation_id": conv_id}),
             );
-            let _ = handle.emit("chat-done", json!({"conversation_id": conv_id}));
 
             let db = handle.state::<Mutex<Connection>>();
             if let Ok(conn) = db.lock() {
@@ -158,6 +159,7 @@ pub async fn send_chat(
                     rusqlite::params![conv_id, no_key_msg],
                 );
             }
+            let _ = handle.emit("chat-done", json!({"conversation_id": conv_id}));
 
             cleanup_cancellers(&handle, conv_id);
         });
@@ -181,17 +183,19 @@ pub async fn send_chat(
     );
 
     tokio::spawn(async move {
-        let mut stream = match llm_client.stream_chat(
-            &system_prompt,
-            anthropic_messages,
-            2000,
-        ).await {
+        let mut stream = match llm_client
+            .stream_chat(&system_prompt, anthropic_messages, 2000)
+            .await
+        {
             Ok(s) => s,
             Err(e) => {
                 let err_msg = format!("AI 导师暂时不可用: {}", e);
-                let _ = handle.emit("chat-token", json!({"token": err_msg, "conversation_id": cid}));
-                let _ = handle.emit("chat-done", json!({"conversation_id": cid}));
+                let _ = handle.emit(
+                    "chat-token",
+                    json!({"token": err_msg, "conversation_id": cid}),
+                );
                 save_assistant_to_handle(&handle, cid, &err_msg);
+                let _ = handle.emit("chat-done", json!({"conversation_id": cid}));
                 cleanup_cancellers(&handle, cid);
                 return;
             }
@@ -207,17 +211,21 @@ pub async fn send_chat(
             match chunk_result {
                 Ok(token) => {
                     full_response.push_str(&token);
-                    let _ = handle.emit("chat-token", json!({"token": token, "conversation_id": cid}));
+                    let _ = handle.emit(
+                        "chat-token",
+                        json!({"token": token, "conversation_id": cid}),
+                    );
                 }
                 Err(e) => {
                     let _ = handle.emit("chat-token", json!({"token": format!("\n[Stream error: {}]", e), "conversation_id": cid}));
+                    break;
                 }
             }
         }
 
-        let _ = handle.emit("chat-done", json!({"conversation_id": cid}));
-
         save_assistant_to_handle(&handle, cid, &full_response);
+
+        let _ = handle.emit("chat-done", json!({"conversation_id": cid}));
 
         // Generate title for new conversations after first exchange
         if was_new && !full_response.is_empty() {
@@ -242,7 +250,10 @@ pub async fn send_chat(
                     );
                 }
             }
-            let _ = handle.emit("chat-title", json!({"conversation_id": cid, "title": good_title}));
+            let _ = handle.emit(
+                "chat-title",
+                json!({"conversation_id": cid, "title": good_title}),
+            );
         }
 
         cleanup_cancellers(&handle, cid);
@@ -270,10 +281,7 @@ fn cleanup_cancellers(handle: &AppHandle, conv_id: i64) {
     }
 }
 
-async fn generate_title(
-    client: &LlmClient,
-    user_msg: &str,
-) -> Result<String, String> {
+async fn generate_title(client: &LlmClient, user_msg: &str) -> Result<String, String> {
     let snippet: String = if user_msg.len() > 200 {
         user_msg.chars().take(200).collect()
     } else {
@@ -292,10 +300,7 @@ async fn generate_title(
 }
 
 #[tauri::command]
-pub fn cancel_chat(
-    conv_id: i64,
-    cancellers: State<'_, StreamCancellers>,
-) -> Result<(), String> {
+pub fn cancel_chat(conv_id: i64, cancellers: State<'_, StreamCancellers>) -> Result<(), String> {
     let map = cancellers.0.lock().map_err(|e| e.to_string())?;
     if let Some(cancel) = map.get(&conv_id) {
         cancel.store(true, Ordering::SeqCst);

@@ -10,8 +10,39 @@ export function SearchBar() {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
+
+  const doSearch = useCallback((q: string) => {
+    if (q.trim().length < 1) {
+      setResults([])
+      return
+    }
+    api
+      .searchAll(q, 8)
+      .then(setResults)
+      .catch(() => setResults([]))
+  }, [])
+
+  const handleInput = (value: string) => {
+    setQuery(value)
+    setSelectedIdx(0)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSearch(value), 300)
+  }
+
+  const getNavTarget = (r: SearchResultItem): string => {
+    if (r.source_type === 'course') return `/courses/${r.context_slug}`
+    if (r.source_type === 'lesson') return `/courses/${r.context_slug}/lessons/${r.source_id}`
+    return `/courses/${r.context_slug}/lessons/${r.context_id}/quiz`
+  }
+
+  const handleSelect = (r: SearchResultItem) => {
+    setOpen(false)
+    setQuery('')
+    setResults([])
+    navigate(getNavTarget(r))
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,53 +76,31 @@ export function SearchBar() {
     if (open) inputRef.current?.focus()
   }, [open])
 
-  const doSearch = useCallback((q: string) => {
-    if (q.trim().length < 1) {
-      setResults([])
-      return
-    }
-    api.searchAll(q, 8).then(setResults).catch(() => setResults([]))
-  }, [])
-
-  const handleInput = (value: string) => {
-    setQuery(value)
-    setSelectedIdx(0)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => doSearch(value), 300)
-  }
-
-  const getNavTarget = (r: SearchResultItem): string => {
-    if (r.source_type === 'course') return `/courses/${r.context_slug}`
-    if (r.source_type === 'lesson') return `/courses/${r.context_slug}/lessons/${r.source_id}`
-    return `/courses/${r.context_slug}/lessons/${r.context_id}/quiz`
-  }
-
-  const handleSelect = (r: SearchResultItem) => {
-    setOpen(false)
-    setQuery('')
-    setResults([])
-    navigate(getNavTarget(r))
-  }
-
   if (!open) return null
 
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
         background: 'rgba(0,0,0,0.4)',
-        display: 'flex', justifyContent: 'center', paddingTop: '12vh',
+        display: 'flex',
+        justifyContent: 'center',
+        paddingTop: '12vh',
       }}
       onClick={() => setOpen(false)}
     >
       <div
         style={{
-          width: '560px', maxHeight: '480px',
+          width: '560px',
+          maxHeight: '480px',
           background: 'var(--bg-primary)',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border)',
           boxShadow: '0 16px 48px rgba(0,0,0,0.25)',
-          display: 'flex', flexDirection: 'column',
+          display: 'flex',
+          flexDirection: 'column',
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
@@ -104,15 +113,25 @@ export function SearchBar() {
             onChange={(e) => handleInput(e.target.value)}
             placeholder="搜索课程、课时、题目..."
             style={{
-              width: '100%', border: 'none', outline: 'none',
-              fontSize: '16px', background: 'transparent',
+              width: '100%',
+              border: 'none',
+              outline: 'none',
+              fontSize: '16px',
+              background: 'transparent',
               color: 'var(--text-primary)',
             }}
           />
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
           {results.length === 0 && query.trim().length > 0 && (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+            <div
+              style={{
+                padding: '24px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '14px',
+              }}
+            >
               未找到相关结果
             </div>
           )}
@@ -128,32 +147,55 @@ export function SearchBar() {
               }}
               onMouseEnter={() => setSelectedIdx(i)}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{
-                  fontSize: '10px', padding: '1px 6px', borderRadius: '8px',
-                  background: r.source_type === 'course' ? 'var(--accent-light)' : r.source_type === 'lesson' ? 'var(--success-light)' : 'var(--warning-light)',
-                  color: r.source_type === 'course' ? 'var(--accent)' : r.source_type === 'lesson' ? 'var(--success)' : 'var(--warning)',
-                  fontWeight: 600,
-                }}>
-                  {r.source_type === 'course' ? '课程' : r.source_type === 'lesson' ? '课时' : '题目'}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}
+              >
+                <span
+                  style={{
+                    fontSize: '10px',
+                    padding: '1px 6px',
+                    borderRadius: '8px',
+                    background:
+                      r.source_type === 'course'
+                        ? 'var(--accent-light)'
+                        : r.source_type === 'lesson'
+                          ? 'var(--success-light)'
+                          : 'var(--warning-light)',
+                    color:
+                      r.source_type === 'course'
+                        ? 'var(--accent)'
+                        : r.source_type === 'lesson'
+                          ? 'var(--success)'
+                          : 'var(--warning)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {r.source_type === 'course'
+                    ? '课程'
+                    : r.source_type === 'lesson'
+                      ? '课时'
+                      : '题目'}
                 </span>
                 <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
                   {r.title}
                 </span>
               </div>
-              <p
-                style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}
-              >
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 <SafeSnippet html={r.snippet || ''} />
               </p>
             </div>
           ))}
         </div>
-        <div style={{
-          padding: '8px 16px', borderTop: '1px solid var(--border)',
-          fontSize: '11px', color: 'var(--text-muted)',
-          display: 'flex', gap: '16px',
-        }}>
+        <div
+          style={{
+            padding: '8px 16px',
+            borderTop: '1px solid var(--border)',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            gap: '16px',
+          }}
+        >
           <span>↑↓ 导航</span>
           <span>Enter 选择</span>
           <span>Esc 关闭</span>

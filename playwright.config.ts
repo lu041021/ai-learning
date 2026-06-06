@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30000,
   retries: 1,
+  fullyParallel: true,
   use: {
     baseURL: 'http://localhost:5173',
     headless: true,
@@ -12,12 +13,16 @@ export default defineConfig({
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    timeout: 60000,
   },
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
   ],
 })

@@ -47,7 +47,13 @@ pub fn get_recommendations(
         .map_err(|e| e.to_string())?;
     let courses: Vec<(i64, String, String, String, i64)> = c_stmt
         .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
@@ -58,7 +64,8 @@ pub fn get_recommendations(
         let mut stmt = conn
             .prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")
             .map_err(|e| e.to_string())?;
-        let rows = stmt.query_map(rusqlite::params![user_id], |row| row.get(0))
+        let rows = stmt
+            .query_map(rusqlite::params![user_id], |row| row.get(0))
             .map_err(|e| e.to_string())?
             .collect::<Result<HashSet<i64>, _>>()
             .map_err(|e| e.to_string())?;
@@ -77,12 +84,13 @@ pub fn get_recommendations(
                  GROUP BY ch.course_id",
             )
             .map_err(|e| e.to_string())?;
-        let rows = stmt.query_map(rusqlite::params![user_id], |row| {
-            Ok((row.get(0)?, row.get::<_, f64>(1)?))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<HashMap<i64, f64>, _>>()
-        .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params![user_id], |row| {
+                Ok((row.get(0)?, row.get::<_, f64>(1)?))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<HashMap<i64, f64>, _>>()
+            .map_err(|e| e.to_string())?;
         rows
     };
 
@@ -119,7 +127,10 @@ pub fn get_recommendations(
             let interest_score = if interest_lower.is_empty() {
                 0.3 // neutral
             } else {
-                let hits = interest_lower.iter().filter(|kw| combined.contains(kw.as_str())).count();
+                let hits = interest_lower
+                    .iter()
+                    .filter(|kw| combined.contains(kw.as_str()))
+                    .count();
                 (hits as f64 / interest_lower.len().max(1) as f64).min(1.0)
             };
 
@@ -136,7 +147,10 @@ pub fn get_recommendations(
             let exp_score = match experience_level.as_str() {
                 "beginner" => {
                     let title_lower = title.to_lowercase();
-                    if title_lower.contains("introduction") || title_lower.contains("basics") || title_lower.contains("入门") {
+                    if title_lower.contains("introduction")
+                        || title_lower.contains("basics")
+                        || title_lower.contains("入门")
+                    {
                         0.9
                     } else {
                         0.5
@@ -149,9 +163,13 @@ pub fn get_recommendations(
 
             // 4. Course affinity (15%)
             let affinity_score = if let Some(score) = course_scores.get(id) {
-                if *score > 0.7 { 0.8 }
-                else if *score > 0.5 { 0.5 }
-                else { 0.2 }
+                if *score > 0.7 {
+                    0.8
+                } else if *score > 0.5 {
+                    0.5
+                } else {
+                    0.2
+                }
             } else {
                 0.0
             };
@@ -163,7 +181,10 @@ pub fn get_recommendations(
 
             // Build reason
             let reason = if course_completed > 0 && course_completed < course_total {
-                format!("继续学习 — 已完成 {}/{} 课时", course_completed, course_total)
+                format!(
+                    "继续学习 — 已完成 {}/{} 课时",
+                    course_completed, course_total
+                )
             } else if interest_score > 0.6 {
                 "与你的兴趣匹配".to_string()
             } else if affinity_score > 0.5 {
@@ -177,7 +198,8 @@ pub fn get_recommendations(
             // Tags from matching interests
             let tags: Vec<String> = interest_lower
                 .iter()
-                .filter(|kw| combined.contains(kw.as_str())).cloned()
+                .filter(|kw| combined.contains(kw.as_str()))
+                .cloned()
                 .collect();
 
             RecommendationItem {
@@ -194,7 +216,11 @@ pub fn get_recommendations(
         })
         .collect();
 
-    scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(scored)
 }
 
@@ -216,5 +242,8 @@ fn course_completed_count(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    Ok(lesson_ids.iter().filter(|&id| completed.contains(id)).count() as i64)
+    Ok(lesson_ids
+        .iter()
+        .filter(|&id| completed.contains(id))
+        .count() as i64)
 }

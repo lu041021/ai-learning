@@ -62,10 +62,7 @@ pub fn get_dashboard_data(
     })
 }
 
-fn build_skill_radar(
-    conn: &Connection,
-    user_id: i64,
-) -> Result<Vec<SkillRadarItem>, String> {
+fn build_skill_radar(conn: &Connection, user_id: i64) -> Result<Vec<SkillRadarItem>, String> {
     let interests_json: Option<String> = conn
         .query_row(
             "SELECT interests FROM user_profiles WHERE user_id = ?1",
@@ -117,7 +114,10 @@ fn build_skill_radar(
                 .find(|(_, title, _)| title.to_lowercase().contains(&label.to_lowercase()))
                 .map(|(_, _, s)| *s)
                 .unwrap_or(global_avg);
-            SkillRadarItem { label, score: matched }
+            SkillRadarItem {
+                label,
+                score: matched,
+            }
         })
         .collect())
 }
@@ -169,10 +169,7 @@ fn build_course_progress(
     Ok(result)
 }
 
-fn build_calendar_days(
-    conn: &Connection,
-    user_id: i64,
-) -> Result<Vec<CalendarDay>, String> {
+fn build_calendar_days(conn: &Connection, user_id: i64) -> Result<Vec<CalendarDay>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT date(created_at) as d, COUNT(*) as cnt
@@ -197,10 +194,7 @@ fn build_calendar_days(
     Ok(days)
 }
 
-fn build_knowledge_tree(
-    conn: &Connection,
-    user_id: i64,
-) -> Result<Vec<TreeNodeData>, String> {
+fn build_knowledge_tree(conn: &Connection, user_id: i64) -> Result<Vec<TreeNodeData>, String> {
     let mut course_stmt = conn
         .prepare("SELECT id, title, slug FROM courses ORDER BY id")
         .map_err(|e| e.to_string())?;
@@ -212,9 +206,7 @@ fn build_knowledge_tree(
         .map_err(|e| e.to_string())?;
 
     let mut chapter_stmt = conn
-        .prepare(
-            "SELECT id, title FROM chapters WHERE course_id = ?1 ORDER BY order_index",
-        )
+        .prepare("SELECT id, title FROM chapters WHERE course_id = ?1 ORDER BY order_index")
         .map_err(|e| e.to_string())?;
 
     let mut lesson_stmt = conn

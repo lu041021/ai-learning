@@ -85,6 +85,7 @@ export interface User {
 export interface AssessmentQuestion {
   question_text: string
   options: string[]
+  multi?: boolean
 }
 
 export interface AssessmentResponse {
@@ -332,4 +333,76 @@ export interface AnalyticsData {
   domainAccuracy: DomainAccuracy[]
   weakAreas: WeakArea[]
   strongAreas: string[]
+}
+
+export interface ToolUsage {
+  tool_name: string
+  frequency: string
+  proficiency_hint: string
+}
+
+export interface KnowledgeGap {
+  domain: string
+  description: string
+  severity: string
+}
+
+export interface UsageProfile {
+  frequent_topics: string[]
+  tool_usage: ToolUsage[]
+  error_patterns: string[]
+  knowledge_gaps: KnowledgeGap[]
+  learning_recommendations: string[]
+  experience_summary: string
+}
+
+export interface ConceptMastery {
+  concept_name: string
+  domain: string
+  mastery_score: number
+  quiz_attempts: number
+  last_score: number | null
+}
+
+export interface WeaknessDetail {
+  domain: string
+  concept_name: string
+  severity: 'high' | 'medium' | 'low'
+  current_score: number
+  suggested_focus: string
+}
+
+export interface LearningStyleProfile {
+  pace: string
+  consistency: string
+  preferred_format: string
+  review_tendency: string
+  avg_session_minutes: number
+}
+
+export interface GoalAnalysis {
+  goal_text: string
+  gap_description: string
+  priority_domains: string[]
+  suggested_milestones: string[]
+}
+
+export interface UserProfileFull {
+  experience_level: string
+  interests: string[]
+  learning_goals: string
+  concept_mastery: ConceptMastery[]
+  domain_strengths: string[]
+  weakness_details: WeaknessDetail[]
+  learning_style: LearningStyleProfile
+  total_lessons_completed: number
+  total_quizzes_taken: number
+  avg_quiz_score: number
+  streak_days: number
+  completion_pct: number
+  external_skill_context: string | null
+  goal_analysis: GoalAnalysis | null
+  summary: string
+  profile_version: number
+  generated_at: string
 }

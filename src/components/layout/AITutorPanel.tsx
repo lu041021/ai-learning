@@ -49,8 +49,12 @@ export function AITutorPanel() {
 
   useEffect(() => {
     if (lessonId) {
-      api.getLesson(parseInt(lessonId)).then((l) => setLessonTitle(l.title)).catch(() => toast.error('加载课时信息失败'))
+      api
+        .getLesson(parseInt(lessonId))
+        .then((l) => setLessonTitle(l.title))
+        .catch(() => toast.error('加载课时信息失败'))
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear title when no lessonId
       setLessonTitle('')
     }
   }, [lessonId])
@@ -70,34 +74,40 @@ export function AITutorPanel() {
   }
 
   return (
-    <aside style={{
-      background: 'var(--bg-secondary)',
-      borderLeft: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border)',
+    <aside
+      style={{
+        background: 'var(--bg-secondary)',
+        borderLeft: '1px solid var(--border)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 600, fontSize: '15px' }}>AI 导师</span>
           {lessonTitle && (
-            <span style={{
-              background: 'var(--accent-light)',
-              color: 'var(--accent)',
-              padding: '2px 8px',
-              borderRadius: '10px',
-              fontSize: '11px',
-              maxWidth: '160px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}>
+            <span
+              style={{
+                background: 'var(--accent-light)',
+                color: 'var(--accent)',
+                padding: '2px 8px',
+                borderRadius: '10px',
+                fontSize: '11px',
+                maxWidth: '160px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {lessonTitle}
             </span>
           )}
@@ -146,12 +156,14 @@ export function AITutorPanel() {
       </div>
 
       {showHistory && (
-        <div style={{
-          maxHeight: '200px',
-          overflow: 'auto',
-          borderBottom: '1px solid var(--border)',
-          padding: '8px',
-        }}>
+        <div
+          style={{
+            maxHeight: '200px',
+            overflow: 'auto',
+            borderBottom: '1px solid var(--border)',
+            padding: '8px',
+          }}
+        >
           {conversations.map((c) => (
             <button
               key={c.id}
@@ -178,25 +190,36 @@ export function AITutorPanel() {
             </button>
           ))}
           {conversations.length === 0 && (
-            <div style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center' }}>
+            <div
+              style={{
+                padding: '12px',
+                color: 'var(--text-muted)',
+                fontSize: '13px',
+                textAlign: 'center',
+              }}
+            >
               暂无对话记录
             </div>
           )}
         </div>
       )}
 
-      <div style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+        }}
+      >
         {messages.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 16px' }}>
             <div style={{ fontSize: '28px', marginBottom: '12px' }}>{'{ }'}</div>
-            <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>你的 AI 导师</div>
+            <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>
+              你的 AI 导师
+            </div>
             <div style={{ fontSize: '12px' }}>
               关于当前课程有任何问题都可以问我！我可以解释概念、举例说明或出题测试。
             </div>

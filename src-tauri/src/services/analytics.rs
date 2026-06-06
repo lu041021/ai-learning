@@ -64,10 +64,7 @@ pub struct WeakArea {
     pub lesson_id: i64,
 }
 
-pub fn get_analytics(
-    db: &Arc<Mutex<Connection>>,
-    user_id: i64,
-) -> Result<AnalyticsData, String> {
+pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<AnalyticsData, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
     // Completion
@@ -83,7 +80,9 @@ pub fn get_analytics(
         .map_err(|e| e.to_string())?;
     let completion_pct = if total_lessons > 0 {
         (completed_lessons as f64 / total_lessons as f64 * 100.0 * 10.0).round() / 10.0
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     // Accuracy
     let accuracy_pct: f64 = conn
@@ -105,7 +104,8 @@ pub fn get_analytics(
                 "SELECT DISTINCT date(completed_at) FROM user_progress WHERE user_id = ?1 AND completed = 1 ORDER BY date(completed_at) DESC",
             )
             .map_err(|e| e.to_string())?;
-        let rows = stmt.query_map(rusqlite::params![user_id], |row| row.get(0))
+        let rows = stmt
+            .query_map(rusqlite::params![user_id], |row| row.get(0))
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<String>, _>>()
             .map_err(|e| e.to_string())?;
@@ -132,7 +132,9 @@ pub fn get_analytics(
             .map_err(|e| e.to_string())?;
         if unique_quizzes > 0 {
             (total_attempts as f64 / unique_quizzes as f64 * 100.0).round() / 100.0 - 1.0
-        } else { 0.0 }
+        } else {
+            0.0
+        }
     };
 
     // Per-course analytics
@@ -177,16 +179,22 @@ fn compute_streaks(dates: &[String]) -> (i64, i64) {
         if prev == cur {
             continue;
         }
-        let prev_day: i64 = prev[8..].parse().unwrap_or(0);
-        let cur_day: i64 = cur[8..].parse().unwrap_or(0);
+        if prev.len() < 10 || cur.len() < 10 {
+            continue;
+        }
+        let prev_day: i64 = prev[8..10].parse().unwrap_or(0);
+        let cur_day: i64 = cur[8..10].parse().unwrap_or(0);
         let prev_month: i64 = prev[5..7].parse().unwrap_or(0);
         let cur_month: i64 = cur[5..7].parse().unwrap_or(0);
         let prev_year: i64 = prev[..4].parse().unwrap_or(0);
         let cur_year: i64 = cur[..4].parse().unwrap_or(0);
 
-        let consecutive = (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
-            || (cur_year == prev_year && cur_month == prev_month - 1
-                && prev_day == 1 && cur_day == 28);
+        let consecutive =
+            (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
+                || (cur_year == prev_year
+                    && cur_month == prev_month - 1
+                    && prev_day == 1
+                    && cur_day == 28);
         if consecutive {
             streak += 1;
         } else {
@@ -220,7 +228,13 @@ fn compute_per_course(conn: &Connection, user_id: i64) -> Result<Vec<CourseAnaly
         .map_err(|e| e.to_string())?;
     let courses: Vec<(i64, String, String, i64, i64)> = stmt
         .query_map(rusqlite::params![user_id], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()

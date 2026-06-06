@@ -24,22 +24,19 @@ fn extract_title(md: &str) -> String {
 
 pub fn run_seed(conn: &Connection) -> Result<(), String> {
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM courses WHERE slug = 'ai-basics'", [], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT COUNT(*) FROM courses WHERE slug = 'ai-basics'",
+            [],
+            |r| r.get(0),
+        )
         .map_err(|e| format!("Seed check failed: {}", e))?;
 
     if count > 0 {
         return Ok(());
     }
 
-    let lessons_data: Vec<(&str, &str)> = vec![
-        (L01, Q01),
-        (L02, Q02),
-        (L03, Q03),
-        (L04, Q04),
-        (L05, Q05),
-    ];
+    let lessons_data: Vec<(&str, &str)> =
+        vec![(L01, Q01), (L02, Q02), (L03, Q03), (L04, Q04), (L05, Q05)];
 
     conn.execute(
         "INSERT INTO courses (title, slug, description) VALUES (?1, ?2, ?3)",
@@ -53,8 +50,10 @@ pub fn run_seed(conn: &Connection) -> Result<(), String> {
 
     let course_id = conn.last_insert_rowid();
 
-    let chapters = [("AI 基础概念", vec![0, 1, 2]),
-        ("AI 实践与未来", vec![3, 4])];
+    let chapters = [
+        ("AI 基础概念", vec![0, 1, 2]),
+        ("AI 实践与未来", vec![3, 4]),
+    ];
 
     let mut lesson_counter = 0i64;
 

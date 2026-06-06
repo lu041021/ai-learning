@@ -106,8 +106,7 @@ pub async fn submit_quiz(
 
     let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
     let (score, feedback, next_step_recommendation) =
-        crate::services::quiz_grader::grade_quiz(&questions_data, &answers, &client)
-            .await;
+        crate::services::quiz_grader::grade_quiz(&questions_data, &answers, &client).await;
 
     let total = questions_data.len() as i64;
     let correct = (score * total as f64).round() as i64;
@@ -170,10 +169,7 @@ pub async fn submit_quiz(
 }
 
 #[tauri::command]
-pub fn clear_user_data(
-    user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<(), String> {
+pub fn clear_user_data(user_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?1)",
@@ -238,7 +234,9 @@ pub fn get_wrong_answers(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
-    for (quiz_id, answers_json, attempted_at, quiz_title, lesson_id, lesson_title, course_slug) in attempts {
+    for (quiz_id, answers_json, attempted_at, quiz_title, lesson_id, lesson_title, course_slug) in
+        attempts
+    {
         let answers: Vec<i64> = serde_json::from_str(&answers_json).unwrap_or_default();
 
         let mut q_stmt = conn
@@ -246,13 +244,20 @@ pub fn get_wrong_answers(
             .map_err(|e| e.to_string())?;
         let questions: Vec<(String, String, i64, String)> = q_stmt
             .query_map(rusqlite::params![quiz_id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get::<_, String>(3).unwrap_or_default()))
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get::<_, String>(3).unwrap_or_default(),
+                ))
             })
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
-        for (i, (question_text, options_json, correct_idx, explanation)) in questions.iter().enumerate() {
+        for (i, (question_text, options_json, correct_idx, explanation)) in
+            questions.iter().enumerate()
+        {
             let user_answer = answers.get(i).copied().unwrap_or(-1);
             if user_answer != *correct_idx {
                 let options: Vec<String> = serde_json::from_str(options_json).unwrap_or_default();

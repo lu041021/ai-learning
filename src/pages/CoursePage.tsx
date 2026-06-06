@@ -1,59 +1,93 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/tauri'
+import { useMountedRef } from '../hooks/useMountedRef'
 import type { CourseDetail } from '../types'
+import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { ErrorBlock } from '../components/common/ErrorBlock'
 
 export function CoursePage() {
   const { slug } = useParams<{ slug: string }>()
   const [course, setCourse] = useState<CourseDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const mountedRef = useRef(true)
+  const mountedRef = useMountedRef()
 
   const fetchCourse = () => {
-    if (!slug) return
+    if (!slug) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
-    api.getCourse(slug).then((c) => {
-      if (mountedRef.current) { setCourse(c); document.title = `${c.title} - AI 学堂`; setLoading(false) }
-    }).catch(() => {
-      if (mountedRef.current) { setError('加载课程失败'); setLoading(false) }
-    })
+    api
+      .getCourse(slug)
+      .then((c) => {
+        if (mountedRef.current) {
+          setCourse(c)
+          document.title = `${c.title} - AI 学堂`
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) {
+          setError('加载课程失败')
+          setLoading(false)
+        }
+      })
   }
 
   useEffect(() => {
-    mountedRef.current = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
     fetchCourse()
-    return () => { mountedRef.current = false }
   }, [slug])
 
   if (loading) {
-    return <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>加载中...</div>
+    return <LoadingSpinner />
   }
 
   if (error) {
+    return <ErrorBlock message={error} onRetry={fetchCourse} />
+  }
+
+  if (!course) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px', textAlign: 'center' }}>
-        <p style={{ color: 'var(--danger)', marginBottom: '16px' }}>{error}</p>
-        <button onClick={fetchCourse} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', fontSize: '14px' }}>重试</button>
+      <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>
+        课程不存在
       </div>
     )
   }
 
-  if (!course) {
-    return <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>课程不存在</div>
-  }
-
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <Link to="/" style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px', display: 'inline-block' }}>
+      <Link
+        to="/"
+        style={{
+          fontSize: '14px',
+          color: 'var(--text-secondary)',
+          marginBottom: '20px',
+          display: 'inline-block',
+        }}
+      >
         &larr; 返回课程列表
       </Link>
       <h1 style={{ fontSize: '26px', fontWeight: 700, marginBottom: '8px' }}>{course.title}</h1>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '32px' }}>{course.description}</p>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '32px' }}>
+        {course.description}
+      </p>
 
       {course.chapters.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', padding: '24px', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)' }}>此课程暂无章节</div>
+        <div
+          style={{
+            color: 'var(--text-muted)',
+            padding: '24px',
+            textAlign: 'center',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
+          此课程暂无章节
+        </div>
       ) : (
         <div style={{ display: 'grid', gap: '24px' }}>
           {course.chapters.map((ch, ci) => (
@@ -66,18 +100,22 @@ export function CoursePage() {
                 overflow: 'hidden',
               }}
             >
-              <div style={{
-                padding: '14px 20px',
-                borderBottom: '1px solid var(--border)',
-                fontWeight: 600,
-                fontSize: '15px',
-                color: 'var(--text-primary)',
-                background: 'var(--bg-tertiary)',
-              }}>
+              <div
+                style={{
+                  padding: '14px 20px',
+                  borderBottom: '1px solid var(--border)',
+                  fontWeight: 600,
+                  fontSize: '15px',
+                  color: 'var(--text-primary)',
+                  background: 'var(--bg-tertiary)',
+                }}
+              >
                 Chapter {ci + 1}: {ch.title}
               </div>
               {ch.lessons.length === 0 ? (
-                <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: '13px' }}>暂无课时</div>
+                <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  暂无课时
+                </div>
               ) : (
                 ch.lessons.map((l) => (
                   <Link

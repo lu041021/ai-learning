@@ -125,3 +125,31 @@ src-tauri/                  # Rust 后端
 | `Ctrl+B` | 切换侧边栏 |
 | `Ctrl+J` | 切换 AI 导师面板 |
 | `Escape` | 关闭 AI 面板 |
+
+## 测试
+
+```bash
+# 全部检查
+just check
+
+# 全部测试
+just test-all
+
+# 前端单元测试 (7 文件, 35 测试)
+npx vitest run
+
+# Rust 测试 (33 单元 + 13 集成 = 46)
+cargo test
+
+# E2E 测试
+npx playwright test
+```
+
+## CI/CD
+
+- **CI** — `cargo fmt/clippy/test` + `tsc/eslint/prettier/vitest` + `playwright` + `commitlint`
+- **Release** — `release-please` 自动版本 bump + changelog
+- **构建** — 三平台矩阵 (Windows/macOS/Linux)
+- **安全** — 每周 `cargo audit` + `npm audit`
+
+当前版本 **0.1.0** — 核心功能闭环已完成，工程基础设施就绪。

@@ -2,7 +2,16 @@ use futures_util::Stream;
 use reqwest::Client as ReqwestClient;
 use serde_json::json;
 use std::pin::Pin;
+use std::sync::LazyLock;
 use std::task::{Context, Poll};
+
+static HTTP_CLIENT: LazyLock<ReqwestClient> = LazyLock::new(|| {
+    ReqwestClient::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .pool_max_idle_per_host(2)
+        .build()
+        .expect("Failed to create global HTTP client")
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LlmProvider {
@@ -110,14 +119,13 @@ impl LlmClient {
         max_tokens: u32,
     ) -> Result<String, String> {
         let (header_name, header_value) = self.build_headers();
-        let client = ReqwestClient::new();
         let body = self.build_body(
             system_prompt,
             vec![json!({"role": "user", "content": user_message})],
             max_tokens,
         );
 
-        let mut req = client
+        let mut req = HTTP_CLIENT
             .post(self.provider.endpoint())
             .header(&header_name, &header_value)
             .json(&body);
@@ -126,7 +134,10 @@ impl LlmClient {
             req = req.header("anthropic-version", "2023-06-01");
         }
 
-        let response = req.send().await.map_err(|e| format!("API 请求失败: {}", e))?;
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("API 请求失败: {}", e))?;
 
         let status = response.status();
         let body: serde_json::Value = response
@@ -135,8 +146,15 @@ impl LlmClient {
             .map_err(|e| format!("解析响应失败: {}", e))?;
 
         if !status.is_success() {
-            eprintln!("[llm] HTTP {} error", status.as_u16());
-            return Err(format!("API 返回错误 ({})", status.as_u16()));
+            let err_detail = body["error"]["message"]
+                .as_str()
+                .unwrap_or(body["error"].as_str().unwrap_or("unknown"));
+            eprintln!("[llm] HTTP {} error: {}", status.as_u16(), err_detail);
+            return Err(format!(
+                "API 返回错误 ({}): {}",
+                status.as_u16(),
+                err_detail
+            ));
         }
 
         self.parse_response_text(&body)
@@ -150,11 +168,10 @@ impl LlmClient {
         max_tokens: u32,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>, String> {
         let (header_name, header_value) = self.build_headers();
-        let client = ReqwestClient::new();
         let mut body = self.build_body(system_prompt, messages, max_tokens);
         body["stream"] = json!(true);
 
-        let mut req = client
+        let mut req = HTTP_CLIENT
             .post(self.provider.endpoint())
             .header(&header_name, &header_value)
             .json(&body);
@@ -163,7 +180,10 @@ impl LlmClient {
             req = req.header("anthropic-version", "2023-06-01");
         }
 
-        let response = req.send().await.map_err(|e| format!("API 请求失败: {}", e))?;
+        let response = req
+            .send()
+            .await
+            .map_err(|e| format!("API 请求失败: {}", e))?;
 
         let stream: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>> =
             Box::pin(response.bytes_stream());

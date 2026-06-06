@@ -39,7 +39,8 @@ pub fn build_system_prompt(
     let mut course_title = "AI Basics".to_string();
     let mut chapter_outline = String::new();
     let mut lesson_title = "General".to_string();
-    let mut lesson_content = "(No specific lesson selected — answer based on general AI knowledge)".to_string();
+    let mut lesson_content =
+        "(No specific lesson selected — answer based on general AI knowledge)".to_string();
 
     if let Some(lid) = lesson_id {
         if let Ok(Some((ltitle, lcontent, chapter_id))) = query_lesson(conn, lid) {
@@ -77,7 +78,8 @@ pub fn build_system_prompt(
     let user_profile = query_user_profile_section(conn, user_id).unwrap_or_default();
 
     // Completed lessons
-    let completed_lessons_section = query_completed_lessons_section(conn, user_id).unwrap_or_default();
+    let completed_lessons_section =
+        query_completed_lessons_section(conn, user_id).unwrap_or_default();
 
     // Weak areas
     let weak_areas_section = query_weak_areas_section(conn, user_id).unwrap_or_default();
@@ -164,7 +166,8 @@ fn query_chapters(conn: &Connection, course_id: i64) -> Result<Vec<(String, i64)
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 fn query_lessons_by_chapter(
@@ -179,7 +182,8 @@ fn query_lessons_by_chapter(
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 fn query_completed_count(conn: &Connection, user_id: i64) -> Result<i64, String> {
@@ -236,7 +240,13 @@ fn query_user_profile_section(conn: &Connection, user_id: i64) -> Result<String,
             };
             Ok(format!(
                 "学生画像：\n- 经验水平：{}\n- 兴趣领域：{}\n- 学习目标：{}\n",
-                level, interests_str, if goals.is_empty() { "未设置" } else { &goals }
+                level,
+                interests_str,
+                if goals.is_empty() {
+                    "未设置"
+                } else {
+                    &goals
+                }
             ))
         }
         Err(_) => Ok(String::new()),
@@ -304,7 +314,10 @@ fn query_weak_areas_section(conn: &Connection, user_id: i64) -> Result<String, S
         .iter()
         .map(|(title, score)| format!("  - {}（得分：{:.0}%）", title, score * 100.0))
         .collect();
-    Ok(format!("需要复习的内容（测验分数低于70%）：\n{}\n", lines.join("\n")))
+    Ok(format!(
+        "需要复习的内容（测验分数低于70%）：\n{}\n",
+        lines.join("\n")
+    ))
 }
 
 fn query_learning_path_section(conn: &Connection, user_id: i64) -> Result<String, String> {

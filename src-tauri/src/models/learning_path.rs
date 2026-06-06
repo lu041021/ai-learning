@@ -8,8 +8,13 @@ pub struct LearningPathStep {
     pub step_type: String,
     pub course_id: Option<i64>,
     pub lesson_id: Option<i64>,
+    #[serde(default = "default_status")]
     pub status: String,
     pub estimated_minutes: i64,
+}
+
+fn default_status() -> String {
+    "available".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -1,49 +1,67 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { useUserStore } from '../stores'
 import { api } from '../api/tauri'
 import { ForceGraph } from '../components/common/ForceGraph'
+import { useMountedRef } from '../hooks/useMountedRef'
 import type { KnowledgeGraphData, ConceptNode } from '../types'
+import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { ErrorBlock } from '../components/common/ErrorBlock'
 
 export function KnowledgeGraphPage() {
   const userId = useUserStore((s) => s.userId)
   const [data, setData] = useState<KnowledgeGraphData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<ConceptNode | null>(null)
   const [filter, setFilter] = useState<'all' | 'mastered' | 'todo'>('all')
-  const mountedRef = useRef(true)
-  const navigate = useNavigate()
+  const mountedRef = useMountedRef()
 
   useEffect(() => {
-    mountedRef.current = true
     document.title = '知识图谱 - AI 学堂'
     if (userId) {
-      api.getKnowledgeGraph(userId).then((d) => {
-        if (mountedRef.current) { setData(d); setLoading(false) }
-      }).catch(() => {
-        if (mountedRef.current) setLoading(false)
-      })
+      api
+        .getKnowledgeGraph(userId)
+        .then((d) => {
+          if (mountedRef.current) {
+            setData(d)
+            setLoading(false)
+          }
+        })
+        .catch(() => {
+          if (mountedRef.current) {
+            setError('加载知识图谱失败')
+            setLoading(false)
+          }
+        })
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no userId means nothing to load
+      setLoading(false)
     }
-    return () => { mountedRef.current = false }
   }, [userId])
 
-  const filteredData = data ? (() => {
-    if (filter === 'all') return data
-    const filteredNodes = data.nodes.filter((n) =>
-      filter === 'mastered'
-        ? n.completedCount === n.lessonCount && n.lessonCount > 0
-        : n.completedCount < n.lessonCount || n.lessonCount === 0
-    )
-    const filteredIds = new Set(filteredNodes.map((n) => n.id))
-    const filteredEdges = data.edges.filter(
-      (e) => filteredIds.has(e.sourceId) && filteredIds.has(e.targetId)
-    )
-    const filteredPositions = data.positions.filter((_, i) => filteredIds.has(data.nodes[i].id))
-    return { nodes: filteredNodes, edges: filteredEdges, positions: filteredPositions }
-  })() : null
+  const filteredData = data
+    ? (() => {
+        if (filter === 'all') return data
+        const filteredNodes = data.nodes.filter((n) =>
+          filter === 'mastered'
+            ? n.completedCount === n.lessonCount && n.lessonCount > 0
+            : n.completedCount < n.lessonCount || n.lessonCount === 0,
+        )
+        const filteredIds = new Set(filteredNodes.map((n) => n.id))
+        const filteredEdges = data.edges.filter(
+          (e) => filteredIds.has(e.sourceId) && filteredIds.has(e.targetId),
+        )
+        const filteredPositions = data.positions.filter((_, i) => filteredIds.has(data.nodes[i].id))
+        return { nodes: filteredNodes, edges: filteredEdges, positions: filteredPositions }
+      })()
+    : null
 
   if (loading) {
-    return <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>加载中...</div>
+    return <LoadingSpinner />
+  }
+
+  if (error) {
+    return <ErrorBlock message={error} />
   }
 
   if (!data || data.nodes.length === 0) {
@@ -60,7 +78,14 @@ export function KnowledgeGraphPage() {
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+        }}
+      >
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px' }}>知识图谱</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
@@ -89,11 +114,16 @@ export function KnowledgeGraphPage() {
       </div>
 
       <div style={{ display: 'flex', gap: '20px' }}>
-        <div style={{
-          flex: 1, background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)',
-          height: '560px', overflow: 'hidden',
-        }}>
+        <div
+          style={{
+            flex: 1,
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            height: '560px',
+            overflow: 'hidden',
+          }}
+        >
           {filteredData && (
             <ForceGraph
               nodes={filteredData.nodes}
@@ -107,16 +137,21 @@ export function KnowledgeGraphPage() {
 
         {/* Detail panel */}
         {selectedNode && (
-          <div style={{
-            width: '280px', flexShrink: 0,
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            padding: '20px',
-            maxHeight: '560px',
-            overflow: 'auto',
-          }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>{selectedNode.name}</h3>
+          <div
+            style={{
+              width: '280px',
+              flexShrink: 0,
+              background: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border)',
+              padding: '20px',
+              maxHeight: '560px',
+              overflow: 'auto',
+            }}
+          >
+            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
+              {selectedNode.name}
+            </h3>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)' }}>
@@ -132,65 +167,94 @@ export function KnowledgeGraphPage() {
               </div>
             </div>
             {/* Progress bar */}
-            <div style={{
-              height: '6px', borderRadius: '3px',
-              background: 'var(--bg-tertiary)', marginBottom: '16px', overflow: 'hidden',
-            }}>
-              <div style={{
-                height: '100%',
-                width: selectedNode.lessonCount > 0
-                  ? `${(selectedNode.completedCount / selectedNode.lessonCount) * 100}%`
-                  : '0%',
-                background: selectedNode.completedCount === selectedNode.lessonCount
-                  ? 'var(--success)' : 'var(--warning)',
+            <div
+              style={{
+                height: '6px',
                 borderRadius: '3px',
-              }} />
+                background: 'var(--bg-tertiary)',
+                marginBottom: '16px',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width:
+                    selectedNode.lessonCount > 0
+                      ? `${(selectedNode.completedCount / selectedNode.lessonCount) * 100}%`
+                      : '0%',
+                  background:
+                    selectedNode.completedCount === selectedNode.lessonCount
+                      ? 'var(--success)'
+                      : 'var(--warning)',
+                  borderRadius: '3px',
+                }}
+              />
             </div>
             {/* Related concepts */}
-            {data && (() => {
-              const related = data.edges
-                .filter((e) => e.sourceId === selectedNode.id || e.targetId === selectedNode.id)
-                .map((e) => {
-                  const otherId = e.sourceId === selectedNode.id ? e.targetId : e.sourceId
-                  return { ...data.nodes.find((n) => n.id === otherId)!, weight: e.weight }
-                })
-                .filter((n) => n.id)
-                .sort((a, b) => b.weight - a.weight)
-                .slice(0, 5)
-              if (related.length === 0) return null
-              return (
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    关联概念
-                  </div>
-                  {related.map((r) => (
+            {data &&
+              (() => {
+                const related = data.edges
+                  .filter((e) => e.sourceId === selectedNode.id || e.targetId === selectedNode.id)
+                  .map((e) => {
+                    const otherId = e.sourceId === selectedNode.id ? e.targetId : e.sourceId
+                    return { ...data.nodes.find((n) => n.id === otherId)!, weight: e.weight }
+                  })
+                  .filter((n) => n.id)
+                  .sort((a, b) => b.weight - a.weight)
+                  .slice(0, 5)
+                if (related.length === 0) return null
+                return (
+                  <div>
                     <div
-                      key={r.id}
-                      onClick={() => setSelectedNode(r)}
                       style={{
-                        padding: '6px 10px', borderRadius: 'var(--radius)',
-                        fontSize: '13px', color: 'var(--accent)',
-                        cursor: 'pointer', marginBottom: '4px',
-                        background: 'var(--bg-primary)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--text-muted)',
+                        marginBottom: '8px',
                       }}
                     >
-                      {r.name}
-                      <span style={{ float: 'right', color: 'var(--text-muted)', fontSize: '11px' }}>
-                        {Math.round(r.weight * 100)}%
-                      </span>
+                      关联概念
                     </div>
-                  ))}
-                </div>
-              )
-            })()}
+                    {related.map((r) => (
+                      <div
+                        key={r.id}
+                        onClick={() => setSelectedNode(r)}
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: 'var(--radius)',
+                          fontSize: '13px',
+                          color: 'var(--accent)',
+                          cursor: 'pointer',
+                          marginBottom: '4px',
+                          background: 'var(--bg-primary)',
+                        }}
+                      >
+                        {r.name}
+                        <span
+                          style={{ float: 'right', color: 'var(--text-muted)', fontSize: '11px' }}
+                        >
+                          {Math.round(r.weight * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
           </div>
         )}
       </div>
 
-      <div style={{
-        marginTop: '16px', display: 'flex', gap: '16px', fontSize: '12px',
-        color: 'var(--text-muted)', justifyContent: 'center',
-      }}>
+      <div
+        style={{
+          marginTop: '16px',
+          display: 'flex',
+          gap: '16px',
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          justifyContent: 'center',
+        }}
+      >
         <span>&#x2B24; 灰色 = 未学习</span>
         <span>&#x2B24; 橙色 = 进行中</span>
         <span>&#x2B24; 绿色 = 已掌握</span>

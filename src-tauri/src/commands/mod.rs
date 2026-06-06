@@ -1,13 +1,13 @@
-pub mod courses;
-pub mod user;
-pub mod progress;
+pub mod analytics;
 pub mod chat;
 pub mod config_cmd;
-pub mod skill_assessment;
+pub mod courses;
 pub mod dashboard;
 pub mod imports;
-pub mod search;
 pub mod knowledge_graph;
+pub mod progress;
 pub mod recommendation;
-pub mod analytics;
-
+pub mod search;
+pub mod skill_assessment;
+pub mod usage_analyzer_cmd;
+pub mod user;

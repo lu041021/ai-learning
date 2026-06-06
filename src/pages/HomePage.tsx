@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useUserStore } from '../stores'
 import { api } from '../api/tauri'
+import { useMountedRef } from '../hooks/useMountedRef'
+import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { ErrorBlock } from '../components/common/ErrorBlock'
 import type { CourseSummary, RecommendationItem } from '../types'
 
 export function HomePage() {
@@ -10,47 +13,44 @@ export function HomePage() {
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const mountedRef = useRef(true)
+  const mountedRef = useMountedRef()
 
   useEffect(() => {
-    mountedRef.current = true
     document.title = 'AI 学堂'
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- standard fetch-on-mount pattern
     setLoading(true)
     setError(null)
 
     Promise.all([
       api.getCourses(),
       userId ? api.getRecommendations(userId).catch(() => []) : Promise.resolve([]),
-    ]).then(([c, r]) => {
-      if (mountedRef.current) {
-        setCourses(c)
-        setRecommendations(r)
-        setLoading(false)
-      }
-    }).catch(() => {
-      if (mountedRef.current) { setError('加载失败'); setLoading(false) }
-    })
-    return () => { mountedRef.current = false }
+    ])
+      .then(([c, r]) => {
+        if (mountedRef.current) {
+          setCourses(c)
+          setRecommendations(r)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) {
+          setError('加载失败')
+          setLoading(false)
+        }
+      })
   }, [userId])
 
   const continueLearning = recommendations.filter(
-    (r) => r.completedLessons > 0 && r.completedLessons < r.totalLessons
+    (r) => r.completedLessons > 0 && r.completedLessons < r.totalLessons,
   )
-  const topRecommendations = recommendations
-    .filter((r) => r.score >= 0.3)
-    .slice(0, 4)
+  const topRecommendations = recommendations.filter((r) => r.score >= 0.3).slice(0, 4)
 
   if (loading) {
-    return <div style={{ color: 'var(--text-muted)', padding: '40px', textAlign: 'center' }}>加载中...</div>
+    return <LoadingSpinner />
   }
 
   if (error) {
-    return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px', textAlign: 'center' }}>
-        <p style={{ color: 'var(--danger)', marginBottom: '16px' }}>{error}</p>
-        <button onClick={() => window.location.reload()} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', fontSize: '14px' }}>重试</button>
-      </div>
-    )
+    return <ErrorBlock message={error} onRetry={() => window.location.reload()} />
   }
 
   return (
@@ -72,7 +72,9 @@ export function HomePage() {
                 key={item.courseId}
                 to={`/courses/${item.slug}`}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
                   padding: '16px 20px',
                   background: 'var(--bg-secondary)',
                   borderRadius: 'var(--radius-lg)',
@@ -82,26 +84,44 @@ export function HomePage() {
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
               >
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      fontSize: '15px',
+                      color: 'var(--text-primary)',
+                      marginBottom: '4px',
+                    }}
+                  >
                     {item.title}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      flex: 1, maxWidth: '200px', height: '6px', borderRadius: '3px',
-                      background: 'var(--bg-tertiary)', overflow: 'hidden',
-                    }}>
-                      <div style={{
-                        height: '100%', borderRadius: '3px',
-                        width: `${(item.completedLessons / item.totalLessons) * 100}%`,
-                        background: 'var(--accent)',
-                      }} />
+                    <div
+                      style={{
+                        flex: 1,
+                        maxWidth: '200px',
+                        height: '6px',
+                        borderRadius: '3px',
+                        background: 'var(--bg-tertiary)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: '100%',
+                          borderRadius: '3px',
+                          width: `${(item.completedLessons / item.totalLessons) * 100}%`,
+                          background: 'var(--accent)',
+                        }}
+                      />
                     </div>
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                       {item.completedLessons}/{item.totalLessons} 课时
                     </span>
                   </div>
                 </div>
-                <span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 500 }}>继续 &rarr;</span>
+                <span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 500 }}>
+                  继续 &rarr;
+                </span>
               </Link>
             ))}
           </div>
@@ -118,7 +138,8 @@ export function HomePage() {
                 key={item.courseId}
                 to={`/courses/${item.slug}`}
                 style={{
-                  display: 'block', padding: '16px',
+                  display: 'block',
+                  padding: '16px',
                   background: 'var(--bg-secondary)',
                   borderRadius: 'var(--radius-lg)',
                   border: '1px solid var(--border)',
@@ -126,14 +147,28 @@ export function HomePage() {
                 onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
               >
-                <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    fontSize: '15px',
+                    color: 'var(--text-primary)',
+                    marginBottom: '4px',
+                  }}
+                >
                   {item.title}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{
-                    fontSize: '11px', padding: '1px 8px', borderRadius: '8px',
-                    background: 'var(--accent-light)', color: 'var(--accent)',
-                  }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '1px 8px',
+                      borderRadius: '8px',
+                      background: 'var(--accent-light)',
+                      color: 'var(--accent)',
+                    }}
+                  >
                     {item.reason}
                   </span>
                   <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -148,20 +183,30 @@ export function HomePage() {
 
       {/* Fallback: no profile yet */}
       {recommendations.length === 0 && continueLearning.length === 0 && (
-        <div style={{
-          marginBottom: '32px', padding: '24px',
-          background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)', textAlign: 'center',
-        }}>
+        <div
+          style={{
+            marginBottom: '32px',
+            padding: '24px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border)',
+            textAlign: 'center',
+          }}
+        >
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
             完成评估以获得个性化课程推荐
           </p>
           <Link
             to="/onboarding"
             style={{
-              display: 'inline-block', marginTop: '12px',
-              padding: '8px 24px', background: 'var(--accent)', color: '#fff',
-              borderRadius: 'var(--radius)', fontSize: '14px', fontWeight: 600,
+              display: 'inline-block',
+              marginTop: '12px',
+              padding: '8px 24px',
+              background: 'var(--accent)',
+              color: '#fff',
+              borderRadius: 'var(--radius)',
+              fontSize: '14px',
+              fontWeight: 600,
             }}
           >
             开始评估
@@ -172,7 +217,15 @@ export function HomePage() {
       {/* All Courses */}
       <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>全部课程</h2>
       {courses.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', padding: '24px', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-lg)' }}>
+        <div
+          style={{
+            color: 'var(--text-muted)',
+            padding: '24px',
+            textAlign: 'center',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
           暂无可用课程，请先导入
         </div>
       ) : (
@@ -192,14 +245,28 @@ export function HomePage() {
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
             >
-              <h3 style={{ fontSize: '17px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
+              <h3
+                style={{
+                  fontSize: '17px',
+                  fontWeight: 600,
+                  marginBottom: '6px',
+                  color: 'var(--text-primary)',
+                }}
+              >
                 {c.title}
               </h3>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                 {c.description}
               </p>
-              <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--accent)', fontWeight: 500 }}>
-                Start Learning &rarr;
+              <div
+                style={{
+                  marginTop: '12px',
+                  fontSize: '13px',
+                  color: 'var(--accent)',
+                  fontWeight: 500,
+                }}
+              >
+                开始学习 &rarr;
               </div>
             </Link>
           ))}

@@ -43,8 +43,7 @@ pub async fn grade_quiz(
             correct += 1;
         }
 
-        let options: Vec<String> =
-            serde_json::from_str(&q.options).unwrap_or_else(|_| vec![]);
+        let options: Vec<String> = serde_json::from_str(&q.options).unwrap_or_else(|_| vec![]);
         let user_ans_text = if user_idx >= 0 && (user_idx as usize) < options.len() {
             &options[user_idx as usize]
         } else {
@@ -76,24 +75,35 @@ pub async fn grade_quiz(
     };
 
     if client.api_key.is_empty() {
-        return (score, build_simple_feedback(score, correct, total as i64), None);
+        return (
+            score,
+            build_simple_feedback(score, correct, total as i64),
+            None,
+        );
     }
 
     let prompt = GRADER_PROMPT
         .replace("{quiz_title}", "Lesson Quiz")
         .replace("{qa_pairs}", &qa_pairs.join("\n\n"));
 
-    match client.chat(
-        "你是一位支持性的 AI 测验评分老师，帮助初学者学习 AI。",
-        &prompt,
-        800,
-    ).await {
+    match client
+        .chat(
+            "你是一位支持性的 AI 测验评分老师，帮助初学者学习 AI。",
+            &prompt,
+            800,
+        )
+        .await
+    {
         Ok(feedback) => {
             let next_step = extract_next_step(&feedback);
             let clean = remove_next_step_tag(&feedback);
             (score, clean, next_step)
         }
-        Err(_) => (score, build_simple_feedback(score, correct, total as i64), None),
+        Err(_) => (
+            score,
+            build_simple_feedback(score, correct, total as i64),
+            None,
+        ),
     }
 }
 
@@ -143,7 +153,10 @@ mod tests {
     #[test]
     fn test_extract_next_step_present() {
         let feedback = "Good job!\n[NEXT_STEP]Review linear regression[/NEXT_STEP]\nKeep going!";
-        assert_eq!(extract_next_step(feedback), Some("Review linear regression".into()));
+        assert_eq!(
+            extract_next_step(feedback),
+            Some("Review linear regression".into())
+        );
     }
 
     #[test]
