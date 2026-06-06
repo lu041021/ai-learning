@@ -1,4 +1,5 @@
 use crate::config::AppConfig;
+use std::io::Write;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -30,4 +31,24 @@ pub fn set_config(
         config.clone()
     };
     crate::config::save_config(&state.path, &config_data)
+}
+
+#[tauri::command]
+pub fn log_frontend_error(message: String, stack: Option<String>) -> Result<(), String> {
+    if let Some(log_dir) = dirs::data_local_dir() {
+        let log_path = log_dir.join("ai-learning").join("frontend_errors.log");
+        if let Some(parent) = log_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let stack_str = stack.as_deref().unwrap_or("(no stack)");
+            let _ = writeln!(file, "[{ts}] ERROR: {message}\nStack: {stack_str}\n");
+        }
+    }
+    Ok(())
 }

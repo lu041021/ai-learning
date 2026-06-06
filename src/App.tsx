@@ -1,4 +1,5 @@
-import { useEffect, Component, lazy, Suspense } from 'react'
+import { useEffect, Component, lazy, Suspense, type ErrorInfo } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { SearchBar } from './components/common/SearchBar'
@@ -68,6 +69,12 @@ class ErrorBoundary extends Component<
   }
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    invoke('log_frontend_error', {
+      message: error.message,
+      stack: (error.stack ?? '') + '\n\nComponent Stack:' + info.componentStack,
+    }).catch(() => {})
   }
   render() {
     if (this.state.hasError) {

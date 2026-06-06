@@ -89,6 +89,7 @@ pub fn run() {
             commands::chat::cancel_chat,
             commands::config_cmd::get_config,
             commands::config_cmd::set_config,
+            commands::config_cmd::log_frontend_error,
             commands::skill_assessment::assess_user_skill,
             commands::skill_assessment::get_user_profile,
             commands::skill_assessment::generate_learning_path,
