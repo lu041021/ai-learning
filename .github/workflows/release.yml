@@ -11,6 +11,8 @@ on:
         required: true
 jobs:
   build-tauri:
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
