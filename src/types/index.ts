@@ -3,12 +3,16 @@ export interface CourseSummary {
   title: string
   slug: string
   description: string
+  difficulty: string
+  duration_minutes: number
+  tags: string[]
 }
 
 export interface LessonSummary {
   id: number
   title: string
   order_index: number
+  duration_minutes: number
 }
 
 export interface ChapterDetail {
@@ -23,6 +27,9 @@ export interface CourseDetail {
   title: string
   slug: string
   description: string
+  difficulty: string
+  duration_minutes: number
+  tags: string[]
   chapters: ChapterDetail[]
 }
 
@@ -32,6 +39,7 @@ export interface LessonDetail {
   content_md: string
   order_index: number
   chapter_id: number
+  duration_minutes: number
 }
 
 export interface QuizQuestion {

@@ -6,6 +6,9 @@ pub struct CourseSummary {
     pub title: String,
     pub slug: String,
     pub description: String,
+    pub difficulty: String,
+    pub duration_minutes: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -13,6 +16,7 @@ pub struct LessonSummary {
     pub id: i64,
     pub title: String,
     pub order_index: i64,
+    pub duration_minutes: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -29,6 +33,9 @@ pub struct CourseDetail {
     pub title: String,
     pub slug: String,
     pub description: String,
+    pub difficulty: String,
+    pub duration_minutes: i64,
+    pub tags: Vec<String>,
     pub chapters: Vec<ChapterDetail>,
 }
 
@@ -39,6 +46,7 @@ pub struct LessonDetail {
     pub content_md: String,
     pub order_index: i64,
     pub chapter_id: i64,
+    pub duration_minutes: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

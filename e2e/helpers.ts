@@ -129,28 +129,27 @@ const populatedMocks: Record<string, unknown> = {
     description: 'Intro to ML concepts',
     difficulty: 'beginner',
     duration_minutes: 120,
-    lesson_count: 3,
     tags: ['ML', 'AI'],
     chapters: [
       {
         id: 101,
         title: 'Introduction',
-        sort_order: 1,
+        order_index: 1,
         lessons: [
-          { id: 1001, chapter_id: 101, title: 'What is ML?', sort_order: 1, duration_minutes: 20 },
-          { id: 1002, chapter_id: 101, title: 'Types of ML', sort_order: 2, duration_minutes: 25 },
+          { id: 1001, chapter_id: 101, title: 'What is ML?', order_index: 1, duration_minutes: 20 },
+          { id: 1002, chapter_id: 101, title: 'Types of ML', order_index: 2, duration_minutes: 25 },
         ],
       },
       {
         id: 102,
         title: 'Supervised Learning',
-        sort_order: 2,
+        order_index: 2,
         lessons: [
           {
             id: 1003,
             chapter_id: 102,
             title: 'Linear Regression',
-            sort_order: 1,
+            order_index: 1,
             duration_minutes: 30,
           },
         ],
@@ -163,6 +162,7 @@ const populatedMocks: Record<string, unknown> = {
     title: 'What is ML?',
     content_md: '# What is ML?\n\nMachine learning is a subset of AI.',
     order_index: 1,
+    duration_minutes: 20,
   },
   get_quiz: {
     id: 1,

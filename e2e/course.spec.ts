@@ -72,6 +72,7 @@ test.describe('Course browsing', () => {
         title: 'Types of ML',
         content_md: '# Types of ML\n\nSupervised and unsupervised.',
         order_index: 2,
+        duration_minutes: 25,
       },
       get_course: {
         id: 1,
@@ -80,26 +81,25 @@ test.describe('Course browsing', () => {
         description: 'Intro to ML concepts',
         difficulty: 'beginner',
         duration_minutes: 120,
-        lesson_count: 3,
         tags: [],
         chapters: [
           {
             id: 101,
             title: 'Introduction',
-            sort_order: 1,
+            order_index: 1,
             lessons: [
               {
                 id: 1001,
                 chapter_id: 101,
                 title: 'What is ML?',
-                sort_order: 1,
+                order_index: 1,
                 duration_minutes: 20,
               },
               {
                 id: 1002,
                 chapter_id: 101,
                 title: 'Types of ML',
-                sort_order: 2,
+                order_index: 2,
                 duration_minutes: 25,
               },
             ],
@@ -140,6 +140,7 @@ test.describe('Course browsing', () => {
         title: 'Types of ML',
         content_md: '# Types of ML\n\nSupervised and unsupervised.',
         order_index: 2,
+        duration_minutes: 25,
       },
       get_course: {
         id: 1,
@@ -148,26 +149,25 @@ test.describe('Course browsing', () => {
         description: 'Intro to ML concepts',
         difficulty: 'beginner',
         duration_minutes: 120,
-        lesson_count: 3,
         tags: [],
         chapters: [
           {
             id: 101,
             title: 'Introduction',
-            sort_order: 1,
+            order_index: 1,
             lessons: [
               {
                 id: 1001,
                 chapter_id: 101,
                 title: 'What is ML?',
-                sort_order: 1,
+                order_index: 1,
                 duration_minutes: 20,
               },
               {
                 id: 1002,
                 chapter_id: 101,
                 title: 'Types of ML',
-                sort_order: 2,
+                order_index: 2,
                 duration_minutes: 25,
               },
             ],

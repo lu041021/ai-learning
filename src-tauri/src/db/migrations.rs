@@ -1,12 +1,15 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 1;
+const CURRENT_VERSION: i64 = 2;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     let version = get_schema_version(conn)?;
 
     if version < 1 {
         migrate_v0_to_v1(conn)?;
+    }
+    if version < 2 {
+        migrate_v1_to_v2(conn)?;
     }
 
     set_schema_version(conn, CURRENT_VERSION)?;
@@ -247,6 +250,29 @@ fn migrate_v0_to_v1(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn migrate_v1_to_v2(conn: &Connection) -> Result<(), String> {
+    add_column_if_not_exists(
+        conn,
+        "courses",
+        "difficulty",
+        "TEXT NOT NULL DEFAULT 'beginner'",
+    )?;
+    add_column_if_not_exists(
+        conn,
+        "courses",
+        "duration_minutes",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_column_if_not_exists(conn, "courses", "tags", "TEXT NOT NULL DEFAULT '[]'")?;
+    add_column_if_not_exists(
+        conn,
+        "lessons",
+        "duration_minutes",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    Ok(())
+}
+
 fn add_column_if_not_exists(
     conn: &Connection,
     table: &str,
@@ -404,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_db_runs_v1() {
+    fn fresh_db_runs_v2() {
         let conn = setup();
         run_migrations(&conn).unwrap();
         let v: i64 = conn
@@ -446,5 +472,57 @@ mod tests {
                 .unwrap();
             assert!(exists, "table {} should exist", t);
         }
+    }
+
+    #[test]
+    fn v2_columns_exist_on_fresh_db() {
+        let conn = setup();
+        run_migrations(&conn).unwrap();
+        for (table, col) in &[
+            ("courses", "difficulty"),
+            ("courses", "duration_minutes"),
+            ("courses", "tags"),
+            ("lessons", "duration_minutes"),
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{}') WHERE name='{}'",
+                        table, col
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 1, "column {}.{} should exist after v2", table, col);
+        }
+    }
+
+    #[test]
+    fn v2_upgrades_v1_db_without_data_loss() {
+        let conn = setup();
+        // Simulate a v1 DB: initialize schema_version, run v0→v1, set version=1
+        get_schema_version(&conn).unwrap();
+        migrate_v0_to_v1(&conn).unwrap();
+        set_schema_version(&conn, 1).unwrap();
+        conn.execute(
+            "INSERT INTO courses (title, slug, description) VALUES ('Old Course', 'old', 'desc')",
+            [],
+        )
+        .unwrap();
+
+        // Now upgrade to v2
+        run_migrations(&conn).unwrap();
+
+        let (title, difficulty, tags): (String, String, String) = conn
+            .query_row(
+                "SELECT title, difficulty, tags FROM courses WHERE slug='old'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "Old Course");
+        assert_eq!(difficulty, "beginner");
+        assert_eq!(tags, "[]");
     }
 }
