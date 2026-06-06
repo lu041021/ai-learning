@@ -31,15 +31,17 @@ describe('useImportStore', () => {
   it('setResult sets result and transitions to done', () => {
     const result = {
       course_id: 1,
-      title: 'Test Course',
-      lesson_count: 5,
-      import_source: 'url',
+      course_title: 'Test Course',
+      course_slug: 'test-course',
+      chapters_count: 1,
+      lessons_count: 5,
+      quiz_count: 0,
     }
     useImportStore.getState().setResult(result)
     const s = useImportStore.getState()
     expect(s.phase).toBe('done')
-    expect(s.result?.title).toBe('Test Course')
-    expect(s.result?.lesson_count).toBe(5)
+    expect(s.result?.course_title).toBe('Test Course')
+    expect(s.result?.lessons_count).toBe(5)
   })
 
   it('setError sets errorText and transitions to error', () => {
@@ -50,7 +52,7 @@ describe('useImportStore', () => {
   })
 
   it('setDuplicate stores duplicate and stays idle', () => {
-    const dup = { is_duplicate: true, existing_course_id: 99, existing_title: 'Old Course' }
+    const dup = { exists: true, existing_course_id: 99, existing_course_title: 'Old Course' }
     useImportStore.getState().setDuplicate(dup)
     const s = useImportStore.getState()
     expect(s.phase).toBe('idle')
@@ -59,7 +61,7 @@ describe('useImportStore', () => {
 
   it('setDuplicate with null clears duplicate', () => {
     useImportStore.setState({
-      duplicate: { is_duplicate: true, existing_course_id: 1, existing_title: 'X' },
+      duplicate: { exists: true, existing_course_id: 1, existing_course_title: 'X' },
     })
     useImportStore.getState().setDuplicate(null)
     expect(useImportStore.getState().duplicate).toBeNull()
@@ -77,7 +79,14 @@ describe('useImportStore', () => {
   it('resetImport clears result from done state', () => {
     useImportStore.setState({
       phase: 'done',
-      result: { course_id: 2, title: 'Course', lesson_count: 3, import_source: 'url' },
+      result: {
+        course_id: 2,
+        course_title: 'Course',
+        course_slug: 'course',
+        chapters_count: 1,
+        lessons_count: 3,
+        quiz_count: 0,
+      },
     })
     useImportStore.getState().resetImport()
     expect(useImportStore.getState().result).toBeNull()
@@ -92,7 +101,14 @@ describe('useImportStore', () => {
     store.setPhase('importing')
     expect(useImportStore.getState().phase).toBe('importing')
 
-    store.setResult({ course_id: 10, title: 'ML Course', lesson_count: 8, import_source: 'github' })
+    store.setResult({
+      course_id: 10,
+      course_title: 'ML Course',
+      course_slug: 'ml-course',
+      chapters_count: 2,
+      lessons_count: 8,
+      quiz_count: 2,
+    })
     const s = useImportStore.getState()
     expect(s.phase).toBe('done')
     expect(s.result?.course_id).toBe(10)
