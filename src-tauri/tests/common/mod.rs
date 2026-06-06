@@ -9,6 +9,7 @@ pub fn setup_in_memory_db() -> Connection {
     conn
 }
 
+#[allow(dead_code)]
 pub fn seed_test_data(conn: &Connection) {
     conn.execute(
         "INSERT INTO courses (id, title, slug, description) VALUES (1, 'Test Course', 'test-course', 'A test')",

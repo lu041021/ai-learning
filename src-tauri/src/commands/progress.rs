@@ -104,7 +104,7 @@ pub async fn submit_quiz(
         result
     };
 
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
+    let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
     let (score, feedback, next_step_recommendation) =
         crate::services::quiz_grader::grade_quiz(&questions_data, &answers, &client).await;
 

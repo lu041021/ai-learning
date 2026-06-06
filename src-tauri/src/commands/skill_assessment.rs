@@ -22,7 +22,7 @@ pub async fn assess_user_skill(
         return Err("请先在设置中配置 API Key".to_string());
     }
 
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
+    let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
     let assessment: SkillAssessment =
         crate::services::skill_assessor::assess_skill(&input.responses, &client).await?;
 
@@ -175,7 +175,11 @@ pub async fn generate_learning_path(
         )
     };
 
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model.clone());
+    let client = LlmClient::new(
+        LlmProvider::from_name(&api_provider),
+        api_key,
+        model.clone(),
+    );
     eprintln!("[generate_path] provider={api_provider} model={model} experience={experience_level} interests={interests:?} outline_len={}", course_outline.len());
     let steps: Vec<LearningPathStep> = crate::services::skill_assessor::generate_path(
         &experience_level,
@@ -475,7 +479,7 @@ pub async fn assess_user_skill_deep(
     };
 
     let prompt = crate::services::profile_builder::build_deep_profile_prompt(&data);
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
+    let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
 
     let response_text = client
         .chat(
@@ -552,7 +556,11 @@ pub async fn generate_enriched_learning_path(
         (profile, outline)
     };
 
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model.clone());
+    let client = LlmClient::new(
+        LlmProvider::from_name(&api_provider),
+        api_key,
+        model.clone(),
+    );
     let steps = crate::services::skill_assessor::generate_path_from_profile(
         &profile,
         &course_outline,
@@ -596,6 +604,7 @@ pub async fn generate_enriched_learning_path(
     })
 }
 
+#[allow(clippy::type_complexity)]
 fn gather_profile_data(
     conn: &Connection,
     user_id: i64,

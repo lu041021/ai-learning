@@ -627,7 +627,7 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
         }
     };
 
-    let client = LlmClient::new(LlmProvider::from_str(&provider_str), key, selected_model);
+    let client = LlmClient::new(LlmProvider::from_name(&provider_str), key, selected_model);
 
     // Run import synchronously (blocks the MCP thread, but import is infrequent)
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;

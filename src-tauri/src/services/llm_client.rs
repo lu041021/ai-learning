@@ -20,7 +20,7 @@ pub enum LlmProvider {
 }
 
 impl LlmProvider {
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "deepseek" => Self::DeepSeek,
             _ => Self::Anthropic,

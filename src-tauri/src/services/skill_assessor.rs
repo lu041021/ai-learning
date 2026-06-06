@@ -238,6 +238,7 @@ Claude Code 使用行为分析：
   ...
 ]"#;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn generate_goal_path(
     experience_level: &str,
     interests: &[String],

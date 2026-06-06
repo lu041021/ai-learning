@@ -177,7 +177,7 @@ pub async fn send_chat(
     let user_msg = message.clone();
 
     let llm_client = LlmClient::new(
-        LlmProvider::from_str(&api_provider),
+        LlmProvider::from_name(&api_provider),
         api_key.clone(),
         model.clone(),
     );
@@ -230,7 +230,7 @@ pub async fn send_chat(
         // Generate title for new conversations after first exchange
         if was_new && !full_response.is_empty() {
             let title_client = LlmClient::new(
-                LlmProvider::from_str(&api_provider_clone),
+                LlmProvider::from_name(&api_provider_clone),
                 api_key_clone.clone(),
                 model_clone.clone(),
             );

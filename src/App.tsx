@@ -191,167 +191,167 @@ export default function App() {
     <BrowserRouter>
       <ThemeProvider>
         <ErrorBoundary>
-        <ToastContainer />
-        <SearchBar />
-        <Routes>
-          <Route
-            path="/onboarding"
-            element={
-              <Suspense fallback={<PageLoader />}>
-                <OnboardingPage />
-              </Suspense>
-            }
-          />
-          <Route element={<AppLayout />}>
+          <ToastContainer />
+          <SearchBar />
+          <Routes>
             <Route
-              path="/"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <HomePage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/courses"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <HomePage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/courses/:slug"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <CoursePage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/courses/:slug/lessons/:lessonId"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <LessonPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/courses/:slug/lessons/:lessonId/quiz"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <QuizPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/settings"
+              path="/onboarding"
               element={
                 <Suspense fallback={<PageLoader />}>
-                  <SettingsPage />
+                  <OnboardingPage />
                 </Suspense>
               }
             />
-            <Route
-              path="/progress"
-              element={
-                <OnboardingGuard>
+            <Route element={<AppLayout />}>
+              <Route
+                path="/"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <HomePage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/courses"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <HomePage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/courses/:slug"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <CoursePage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/courses/:slug/lessons/:lessonId"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <LessonPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/courses/:slug/lessons/:lessonId/quiz"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <QuizPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
                   <Suspense fallback={<PageLoader />}>
-                    <ProgressPage />
+                    <SettingsPage />
                   </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/learning-path"
-              element={
-                <OnboardingGuard>
+                }
+              />
+              <Route
+                path="/progress"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <ProgressPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/learning-path"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <LearningPathPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/import"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <ImportPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/import/github"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <GitHubImportPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/import/rss"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <RssImportPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/search"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <SearchPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/knowledge-graph"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <KnowledgeGraphPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+              <Route
+                path="/mcp-playground"
+                element={
                   <Suspense fallback={<PageLoader />}>
-                    <LearningPathPage />
+                    <McpPlaygroundPage />
                   </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/import"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <ImportPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/import/github"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <GitHubImportPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/import/rss"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <RssImportPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/search"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <SearchPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/knowledge-graph"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <KnowledgeGraphPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-            <Route
-              path="/mcp-playground"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <McpPlaygroundPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <OnboardingGuard>
-                  <Suspense fallback={<PageLoader />}>
-                    <AnalyticsPage />
-                  </Suspense>
-                </OnboardingGuard>
-              }
-            />
-          </Route>
-        </Routes>
-      </ErrorBoundary>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <OnboardingGuard>
+                    <Suspense fallback={<PageLoader />}>
+                      <AnalyticsPage />
+                    </Suspense>
+                  </OnboardingGuard>
+                }
+              />
+            </Route>
+          </Routes>
+        </ErrorBoundary>
       </ThemeProvider>
     </BrowserRouter>
   )

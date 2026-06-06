@@ -13,7 +13,7 @@ pub async fn analyze_usage(
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
+    let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
     crate::services::usage_analyzer::analyze_usage(&client).await
 }
 
@@ -31,7 +31,7 @@ pub async fn generate_goal_path(
 
     let usage_context = {
         let client = LlmClient::new(
-            LlmProvider::from_str(&api_provider),
+            LlmProvider::from_name(&api_provider),
             api_key.clone(),
             model.clone(),
         );
@@ -129,7 +129,11 @@ pub async fn generate_goal_path(
         )
     };
 
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model.clone());
+    let client = LlmClient::new(
+        LlmProvider::from_name(&api_provider),
+        api_key,
+        model.clone(),
+    );
     let steps: Vec<LearningPathStep> = crate::services::skill_assessor::generate_goal_path(
         &experience_level,
         &interests,

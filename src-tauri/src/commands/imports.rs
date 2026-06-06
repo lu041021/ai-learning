@@ -16,7 +16,7 @@ pub async fn import_from_url(
     api_provider: String,
     db: State<'_, Arc<Mutex<Connection>>>,
 ) -> Result<ImportCourseResult, String> {
-    let client = LlmClient::new(LlmProvider::from_str(&api_provider), api_key, model);
+    let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
     let ai_course =
         crate::services::course_importer::fetch_and_structure_course(&url, &client).await?;
 
