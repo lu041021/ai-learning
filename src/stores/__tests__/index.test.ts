@@ -235,4 +235,30 @@ describe('useLearningPathStore', () => {
 
     expect(useLearningPathStore.getState().generating).toBe(false)
   })
+
+  it('resetPath clears path and resets loaded so fetchPath re-fetches', async () => {
+    useLearningPathStore.setState({
+      path: { id: 1, user_id: 1, steps: [], generated_at: '', updated_at: '' },
+      loaded: true,
+    })
+
+    useLearningPathStore.getState().resetPath()
+
+    const s = useLearningPathStore.getState()
+    expect(s.path).toBeNull()
+    expect(s.loaded).toBe(false)
+
+    mockApi.getLearningPath.mockResolvedValueOnce({
+      id: 2,
+      user_id: 1,
+      steps: [],
+      generated_at: '',
+      updated_at: '',
+    })
+    await act(async () => {
+      await useLearningPathStore.getState().fetchPath(1)
+    })
+    expect(mockApi.getLearningPath).toHaveBeenCalledTimes(1)
+    expect(useLearningPathStore.getState().path?.id).toBe(2)
+  })
 })
