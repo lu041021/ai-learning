@@ -3,6 +3,7 @@ pub mod chat;
 pub mod config_cmd;
 pub mod courses;
 pub mod dashboard;
+pub mod documents;
 pub mod imports;
 pub mod knowledge_graph;
 pub mod progress;

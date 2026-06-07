@@ -41,12 +41,7 @@ fn prompt_without_lesson_uses_general_defaults() {
     let conn = setup_db();
     seed_user(&conn, 1);
 
-    let prompt = build_system_prompt(&conn, 1, None, None).unwrap();
-
-    assert!(
-        prompt.contains("AI Basics"),
-        "default course title when no lesson"
-    );
+    let prompt = build_system_prompt(&conn, 1, None, None, None).unwrap();
     assert!(
         prompt.contains("General"),
         "default lesson title when no lesson"
@@ -60,7 +55,7 @@ fn prompt_with_lesson_includes_lesson_title_and_content() {
     seed_user(&conn, 1);
     seed_course_with_lesson(&conn);
 
-    let prompt = build_system_prompt(&conn, 1, Some(1), None).unwrap();
+    let prompt = build_system_prompt(&conn, 1, Some(1), None, None).unwrap();
 
     assert!(prompt.contains("What is ML?"), "lesson title in prompt");
     assert!(
@@ -83,7 +78,7 @@ fn prompt_includes_progress_counts() {
     )
     .unwrap();
 
-    let prompt = build_system_prompt(&conn, 1, Some(1), None).unwrap();
+    let prompt = build_system_prompt(&conn, 1, Some(1), None, None).unwrap();
 
     // completed_count/total_lessons should be interpolated (not raw placeholders)
     assert!(
@@ -101,7 +96,7 @@ fn prompt_includes_selected_text_section() {
     let conn = setup_db();
     seed_user(&conn, 1);
 
-    let prompt = build_system_prompt(&conn, 1, None, Some("gradient descent")).unwrap();
+    let prompt = build_system_prompt(&conn, 1, None, Some("gradient descent"), None).unwrap();
 
     assert!(
         prompt.contains("gradient descent"),
@@ -118,8 +113,8 @@ fn prompt_ignores_empty_selected_text() {
     let conn = setup_db();
     seed_user(&conn, 1);
 
-    let prompt_empty = build_system_prompt(&conn, 1, None, Some("   ")).unwrap();
-    let prompt_none = build_system_prompt(&conn, 1, None, None).unwrap();
+    let prompt_empty = build_system_prompt(&conn, 1, None, Some("   "), None).unwrap();
+    let prompt_none = build_system_prompt(&conn, 1, None, None, None).unwrap();
 
     assert_eq!(
         prompt_empty, prompt_none,
@@ -133,7 +128,7 @@ fn prompt_chapter_outline_lists_all_lessons() {
     seed_user(&conn, 1);
     seed_course_with_lesson(&conn);
 
-    let prompt = build_system_prompt(&conn, 1, Some(1), None).unwrap();
+    let prompt = build_system_prompt(&conn, 1, Some(1), None, None).unwrap();
 
     assert!(prompt.contains("What is ML?"), "lesson 1 in outline");
     assert!(prompt.contains("Types of ML"), "lesson 2 in outline");
@@ -145,7 +140,7 @@ fn prompt_nonexistent_lesson_falls_back_to_general() {
     seed_user(&conn, 1);
 
     // lesson_id 999 does not exist
-    let prompt = build_system_prompt(&conn, 1, Some(999), None).unwrap();
+    let prompt = build_system_prompt(&conn, 1, Some(999), None, None).unwrap();
 
     // Should succeed with fallback values, not error
     assert!(

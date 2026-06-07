@@ -414,3 +414,12 @@ export interface UserProfileFull {
   profile_version: number
   generated_at: string
 }
+
+export interface DocumentOut {
+  id: number
+  filename: string
+  fileType: string
+  sizeBytes: number
+  chunkCount: number
+  createdAt: string
+}

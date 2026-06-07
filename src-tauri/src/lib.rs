@@ -129,6 +129,9 @@ pub fn run() {
             commands::usage_analyzer_cmd::generate_goal_path,
             commands::skill_assessment::assess_user_skill_deep,
             commands::skill_assessment::generate_enriched_learning_path,
+            commands::documents::upload_document,
+            commands::documents::list_documents,
+            commands::documents::delete_document,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

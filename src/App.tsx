@@ -41,6 +41,9 @@ const McpPlaygroundPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
 )
+const DocumentPage = lazy(() =>
+  import('./pages/DocumentPage').then((m) => ({ default: m.DocumentPage })),
+)
 
 function PageLoader() {
   return (
@@ -242,6 +245,7 @@ export default function App() {
               <Route path="/knowledge-graph" element={<GuardedPage Page={KnowledgeGraphPage} />} />
               <Route path="/mcp-playground" element={<FreePage Page={McpPlaygroundPage} />} />
               <Route path="/analytics" element={<GuardedPage Page={AnalyticsPage} />} />
+              <Route path="/documents" element={<GuardedPage Page={DocumentPage} />} />
             </Route>
           </Routes>
         </ErrorBoundary>

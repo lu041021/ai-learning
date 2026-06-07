@@ -32,3 +32,5 @@ dotenvy = "0.15"
 scraper = "0.20"
 feed-rs = "2"
 tiny_http = "0.12"
+lopdf = "0.33"
+zip = { version = "2", default-features = false, features = ["deflate"] }

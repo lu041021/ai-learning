@@ -230,6 +230,18 @@ export function CourseSidebar() {
         >
           RSS 订阅
         </Link>
+        <Link
+          to="/documents"
+          style={{
+            display: 'block',
+            padding: '8px 20px',
+            color: 'var(--text-secondary)',
+            fontSize: '14px',
+            marginBottom: '8px',
+          }}
+        >
+          我的文档
+        </Link>
 
         {course && (
           <div>

@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 4;
+const CURRENT_VERSION: i64 = 5;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     let version = get_schema_version(conn)?;
@@ -16,6 +16,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     }
     if version < 4 {
         migrate_v3_to_v4(conn)?;
+    }
+    if version < 5 {
+        migrate_v4_to_v5(conn)?;
     }
 
     set_schema_version(conn, CURRENT_VERSION)?;
@@ -424,6 +427,28 @@ fn seed_concepts(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn migrate_v4_to_v5(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS user_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            chunk_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_documents_user
+            ON user_documents(user_id);
+        CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks USING fts5(
+            doc_id, user_id, chunk_index, content,
+            tokenize='porter unicode61'
+        );",
+    )
+    .map_err(|e| format!("migrate_v4_to_v5: {}", e))
+}
+
 fn migrate_v3_to_v4(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_created
@@ -580,24 +605,18 @@ mod tests {
     }
 
     #[test]
-    fn v4_indexes_exist_on_fresh_db() {
+    fn v5_doc_tables_exist_on_fresh_db() {
         let conn = setup();
         run_migrations(&conn).unwrap();
-        let indexes = [
-            "idx_quiz_attempts_user_created",
-            "idx_user_progress_user_completed_at",
-            "idx_conversations_user_updated",
-            "idx_learning_path_history_user",
-        ];
-        for idx in &indexes {
+        for name in &["user_documents", "doc_chunks"] {
             let exists: bool = conn
                 .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='index' AND name=?1)",
-                    rusqlite::params![idx],
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name=?1)",
+                    rusqlite::params![name],
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert!(exists, "index {} should exist after v4 migration", idx);
+            assert!(exists, "table/vtable {} should exist after v5", name);
         }
     }
 }

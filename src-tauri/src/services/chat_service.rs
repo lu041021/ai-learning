@@ -71,8 +71,13 @@ pub fn prepare_conversation(
         .map(|(role, content)| json!({"role": role, "content": content}))
         .collect();
 
-    let system_prompt =
-        crate::services::ai_tutor::build_system_prompt(conn, user_id, lesson_id, selected_text)?;
+    let system_prompt = crate::services::ai_tutor::build_system_prompt(
+        conn,
+        user_id,
+        lesson_id,
+        selected_text,
+        Some(message),
+    )?;
 
     Ok(PrepareResult {
         conv_id,

@@ -28,6 +28,7 @@ import type {
   AnalyticsData,
   UsageProfile,
   UserProfileFull,
+  DocumentOut,
 } from '../types'
 
 export interface AppConfig {
@@ -170,4 +171,12 @@ export const api = {
     invoke<LearningPathOut>('generate_enriched_learning_path', { userId }),
 
   getMcpToken: () => invoke<string>('get_mcp_token'),
+
+  uploadDocument: (userId: number, filename: string, fileBytes: number[]) =>
+    invoke<DocumentOut>('upload_document', { userId, filename, fileBytes }),
+
+  listDocuments: (userId: number) => invoke<DocumentOut[]>('list_documents', { userId }),
+
+  deleteDocument: (docId: number, userId: number) =>
+    invoke<void>('delete_document', { docId, userId }),
 }

@@ -27,7 +27,7 @@ const SYSTEM_PROMPT_TEMPLATE: &str = r#"你是一位 AI 导师，正在帮助初
 {weak_areas_section}
 {learning_path_section}
 {selected_text_section}
-
+{doc_context_section}
 用中文回复学生。保持回答聚焦、清晰。"#;
 
 pub fn build_system_prompt(
@@ -35,6 +35,7 @@ pub fn build_system_prompt(
     user_id: i64,
     lesson_id: Option<i64>,
     selected_text: Option<&str>,
+    message: Option<&str>,
 ) -> Result<String, String> {
     let mut course_title = "AI Basics".to_string();
     let mut chapter_outline = String::new();
@@ -115,6 +116,13 @@ pub fn build_system_prompt(
         String::new()
     };
 
+    let query = message.unwrap_or_default();
+    let doc_context_section = if !query.trim().is_empty() {
+        query_doc_context(conn, user_id, query).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
     Ok(SYSTEM_PROMPT_TEMPLATE
         .replace("{user_profile}", &user_profile)
         .replace("{course_title}", &course_title)
@@ -127,7 +135,8 @@ pub fn build_system_prompt(
         .replace("{completed_lessons_section}", &completed_lessons_section)
         .replace("{weak_areas_section}", &weak_areas_section)
         .replace("{learning_path_section}", &learning_path_section)
-        .replace("{selected_text_section}", &selected_text_section))
+        .replace("{selected_text_section}", &selected_text_section)
+        .replace("{doc_context_section}", &doc_context_section))
 }
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -380,4 +389,64 @@ fn build_all_courses_outline(conn: &Connection) -> Result<String, String> {
         lines.push(format!("    - {}", lesson_title));
     }
     Ok(lines.join("\n"))
+}
+
+fn query_doc_context(conn: &Connection, user_id: i64, query: &str) -> Result<String, String> {
+    let fts_query = query
+        .split_whitespace()
+        .map(|w| {
+            let cleaned: String = w
+                .chars()
+                .filter(|c| c.is_alphanumeric() || c.is_alphabetic())
+                .collect();
+            format!("\"{}\"", cleaned.replace('"', ""))
+        })
+        .filter(|w| w.len() > 2)
+        .collect::<Vec<_>>()
+        .join(" OR ");
+
+    if fts_query.is_empty() {
+        return Ok(String::new());
+    }
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM doc_chunks WHERE user_id = ?1",
+            rusqlite::params![user_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+    if count == 0 {
+        return Ok(String::new());
+    }
+
+    let sql = "SELECT content FROM doc_chunks
+         WHERE doc_chunks MATCH ?1
+           AND user_id = ?2
+         ORDER BY rank LIMIT 3";
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return Ok(String::new()),
+    };
+    let chunks: Vec<String> = stmt
+        .query_map(rusqlite::params![fts_query, user_id], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if chunks.is_empty() {
+        return Ok(String::new());
+    }
+
+    let joined = chunks
+        .iter()
+        .enumerate()
+        .map(|(i, c)| format!("[{}] {}", i + 1, c))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    Ok(format!(
+        "以下是学生上传的参考文档中与当前问题相关的片段：\n---\n{}\n---\n",
+        joined
+    ))
 }
