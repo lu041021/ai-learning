@@ -50,18 +50,33 @@ pub fn build_system_prompt(
             if let Ok(Some((ctitle, course_id))) = query_course_by_chapter(conn, chapter_id) {
                 course_title = ctitle;
 
-                if let Ok(chapters) = query_chapters(conn, course_id) {
-                    let mut lines = Vec::new();
-                    for (ch_title, ch_id) in &chapters {
+                let mut ch_stmt = conn
+                    .prepare(
+                        "SELECT ch.title, l.title
+                         FROM chapters ch
+                         JOIN lessons l ON l.chapter_id = ch.id
+                         WHERE ch.course_id = ?1
+                         ORDER BY ch.order_index, l.order_index",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let ch_rows: Vec<(String, String)> = ch_stmt
+                    .query_map(rusqlite::params![course_id], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })
+                    .map_err(|e| e.to_string())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| e.to_string())?;
+
+                let mut lines = Vec::new();
+                let mut last_ch = String::new();
+                for (ch_title, l_title) in &ch_rows {
+                    if *ch_title != last_ch {
                         lines.push(format!("Chapter: {}", ch_title));
-                        if let Ok(lessons) = query_lessons_by_chapter(conn, *ch_id) {
-                            for (l_title, _lid) in &lessons {
-                                lines.push(format!("  - {}", l_title));
-                            }
-                        }
+                        last_ch = ch_title.clone();
                     }
-                    chapter_outline = lines.join("\n");
+                    lines.push(format!("  - {}", l_title));
                 }
+                chapter_outline = lines.join("\n");
             }
         }
     } else {
@@ -115,11 +130,11 @@ pub fn build_system_prompt(
         .replace("{selected_text_section}", &selected_text_section))
 }
 
-fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
+fn truncate(s: &str, max_chars: usize) -> String {
+    if s.chars().count() <= max_chars {
         s.to_string()
     } else {
-        s[..max_len].to_string()
+        s.chars().take(max_chars).collect()
     }
 }
 
@@ -157,35 +172,6 @@ fn query_course_by_chapter(
     Ok(rows.next().and_then(|r| r.ok()))
 }
 
-fn query_chapters(conn: &Connection, course_id: i64) -> Result<Vec<(String, i64)>, String> {
-    let mut stmt = conn
-        .prepare("SELECT title, id FROM chapters WHERE course_id = ?1 ORDER BY order_index")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(rusqlite::params![course_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
-}
-
-fn query_lessons_by_chapter(
-    conn: &Connection,
-    chapter_id: i64,
-) -> Result<Vec<(String, i64)>, String> {
-    let mut stmt = conn
-        .prepare("SELECT title, id FROM lessons WHERE chapter_id = ?1 ORDER BY order_index")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(rusqlite::params![chapter_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
-}
-
 fn query_completed_count(conn: &Connection, user_id: i64) -> Result<i64, String> {
     conn.query_row(
         "SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1",
@@ -201,20 +187,17 @@ fn query_total_lessons(conn: &Connection) -> Result<i64, String> {
 }
 
 pub fn query_quiz_avg(conn: &Connection, user_id: i64) -> Result<String, String> {
-    let mut stmt = conn
-        .prepare("SELECT score FROM quiz_attempts WHERE user_id = ?1")
+    let avg: Option<f64> = conn
+        .query_row(
+            "SELECT AVG(score) FROM quiz_attempts WHERE user_id = ?1",
+            rusqlite::params![user_id],
+            |row| row.get(0),
+        )
         .map_err(|e| e.to_string())?;
-    let scores: Vec<f64> = stmt
-        .query_map(rusqlite::params![user_id], |row| row.get::<_, f64>(0))
-        .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
 
-    if scores.is_empty() {
-        Ok("N/A".to_string())
-    } else {
-        let avg = scores.iter().sum::<f64>() / scores.len() as f64;
-        Ok(format!("{:.0}%", avg * 100.0))
+    match avg {
+        Some(v) => Ok(format!("{:.0}%", v * 100.0)),
+        None => Ok("N/A".to_string()),
     }
 }
 
@@ -288,13 +271,13 @@ fn query_completed_lessons_section(conn: &Connection, user_id: i64) -> Result<St
 fn query_weak_areas_section(conn: &Connection, user_id: i64) -> Result<String, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT l.title, qa.score
+            "SELECT l.title, MIN(qa.score) as min_score
              FROM quiz_attempts qa
              JOIN quizzes qz ON qz.id = qa.quiz_id
              JOIN lessons l ON l.id = qz.lesson_id
              WHERE qa.user_id = ?1 AND qa.score < 0.7
              GROUP BY l.id
-             ORDER BY qa.score ASC
+             ORDER BY min_score ASC
              LIMIT 5",
         )
         .map_err(|e| e.to_string())?;
@@ -354,32 +337,47 @@ fn query_learning_path_section(conn: &Connection, user_id: i64) -> Result<String
 }
 
 fn build_all_courses_outline(conn: &Connection) -> Result<String, String> {
-    let mut course_stmt = conn
-        .prepare("SELECT id, title FROM courses ORDER BY id")
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.id, c.title, ch.id, ch.title, l.title
+             FROM courses c
+             JOIN chapters ch ON ch.course_id = c.id
+             JOIN lessons l ON l.chapter_id = ch.id
+             ORDER BY c.id, ch.order_index, l.order_index",
+        )
         .map_err(|e| e.to_string())?;
-    let courses: Vec<(i64, String)> = course_stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+    let rows: Vec<(i64, String, i64, String, String)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    if courses.is_empty() {
+    if rows.is_empty() {
         return Ok("(暂无课程)".to_string());
     }
 
     let mut lines = Vec::new();
-    for (course_id, course_title) in &courses {
-        lines.push(format!("课程：{}", course_title));
-        if let Ok(chapters) = query_chapters(conn, *course_id) {
-            for (ch_title, ch_id) in &chapters {
-                lines.push(format!("  Chapter: {}", ch_title));
-                if let Ok(lessons) = query_lessons_by_chapter(conn, *ch_id) {
-                    for (l_title, _lid) in &lessons {
-                        lines.push(format!("    - {}", l_title));
-                    }
-                }
-            }
+    let mut last_course_id = -1i64;
+    let mut last_chapter_id = -1i64;
+    for (course_id, course_title, chapter_id, chapter_title, lesson_title) in &rows {
+        if *course_id != last_course_id {
+            lines.push(format!("课程：{}", course_title));
+            last_course_id = *course_id;
+            last_chapter_id = -1;
         }
+        if *chapter_id != last_chapter_id {
+            lines.push(format!("  Chapter: {}", chapter_title));
+            last_chapter_id = *chapter_id;
+        }
+        lines.push(format!("    - {}", lesson_title));
     }
     Ok(lines.join("\n"))
 }

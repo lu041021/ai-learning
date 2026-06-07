@@ -67,15 +67,14 @@ pub struct WeakArea {
 pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<AnalyticsData, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
-    // Completion
-    let total_lessons: i64 = conn
-        .query_row("SELECT COUNT(*) FROM lessons", [], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
-    let completed_lessons: i64 = conn
+    // Completion + accuracy + quiz review stats — 2 queries instead of 5
+    let (total_lessons, completed_lessons) = conn
         .query_row(
-            "SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1",
+            "SELECT
+                (SELECT COUNT(*) FROM lessons),
+                (SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1)",
             rusqlite::params![user_id],
-            |r| r.get(0),
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
         )
         .map_err(|e| e.to_string())?;
     let completion_pct = if total_lessons > 0 {
@@ -84,24 +83,33 @@ pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<Analyt
         0.0
     };
 
-    // Accuracy
-    let accuracy_pct: f64 = conn
+    let (accuracy_raw, unique_quizzes, total_attempts) = conn
         .query_row(
-            "SELECT AVG(score) FROM quiz_attempts WHERE user_id = ?1",
+            "SELECT AVG(score), COUNT(DISTINCT quiz_id), COUNT(*)
+             FROM quiz_attempts WHERE user_id = ?1",
             rusqlite::params![user_id],
             |r| {
-                let avg: Option<f64> = r.get(0)?;
-                Ok(avg.unwrap_or(0.0) * 100.0)
+                Ok((
+                    r.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             },
         )
         .map_err(|e| e.to_string())?;
-    let accuracy_pct = (accuracy_pct * 10.0).round() / 10.0;
+    let accuracy_pct = (accuracy_raw * 100.0 * 10.0).round() / 10.0;
+    let review_rate = if unique_quizzes > 0 {
+        (total_attempts as f64 / unique_quizzes as f64 * 100.0).round() / 100.0 - 1.0
+    } else {
+        0.0
+    };
 
     // Streak
     let completed_dates: Vec<String> = {
         let mut stmt = conn
             .prepare(
-                "SELECT DISTINCT date(completed_at) FROM user_progress WHERE user_id = ?1 AND completed = 1 ORDER BY date(completed_at) DESC",
+                "SELECT DISTINCT date(completed_at) FROM user_progress \
+                 WHERE user_id = ?1 AND completed = 1 ORDER BY date(completed_at) DESC",
             )
             .map_err(|e| e.to_string())?;
         let rows = stmt
@@ -111,31 +119,7 @@ pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<Analyt
             .map_err(|e| e.to_string())?;
         rows
     };
-
     let (streak_days, longest_streak) = compute_streaks(&completed_dates);
-
-    // Review rate
-    let review_rate: f64 = {
-        let unique_quizzes: i64 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT quiz_id) FROM quiz_attempts WHERE user_id = ?1",
-                rusqlite::params![user_id],
-                |r| r.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        let total_attempts: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM quiz_attempts WHERE user_id = ?1",
-                rusqlite::params![user_id],
-                |r| r.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        if unique_quizzes > 0 {
-            (total_attempts as f64 / unique_quizzes as f64 * 100.0).round() / 100.0 - 1.0
-        } else {
-            0.0
-        }
-    };
 
     // Per-course analytics
     let per_course = compute_per_course(&conn, user_id)?;
@@ -165,37 +149,28 @@ pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<Analyt
 }
 
 fn compute_streaks(dates: &[String]) -> (i64, i64) {
-    if dates.is_empty() {
+    use chrono::NaiveDate;
+    let parsed: Vec<NaiveDate> = dates
+        .iter()
+        .filter_map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        .collect();
+
+    if parsed.is_empty() {
         return (0, 0);
     }
+
     let mut streak = 1i64;
     let mut longest = 1i64;
     let mut current = 1i64;
     let mut first_streak_captured = false;
 
-    for i in 1..dates.len() {
-        let prev = &dates[i - 1];
-        let cur = &dates[i];
+    for i in 1..parsed.len() {
+        let prev = parsed[i - 1];
+        let cur = parsed[i];
         if prev == cur {
             continue;
         }
-        if prev.len() < 10 || cur.len() < 10 {
-            continue;
-        }
-        let prev_day: i64 = prev[8..10].parse().unwrap_or(0);
-        let cur_day: i64 = cur[8..10].parse().unwrap_or(0);
-        let prev_month: i64 = prev[5..7].parse().unwrap_or(0);
-        let cur_month: i64 = cur[5..7].parse().unwrap_or(0);
-        let prev_year: i64 = prev[..4].parse().unwrap_or(0);
-        let cur_year: i64 = cur[..4].parse().unwrap_or(0);
-
-        let consecutive =
-            (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
-                || (cur_year == prev_year
-                    && cur_month == prev_month - 1
-                    && prev_day == 1
-                    && cur_day == 28);
-        if consecutive {
+        if prev.pred_opt() == Some(cur) {
             streak += 1;
         } else {
             if !first_streak_captured {
@@ -207,7 +182,7 @@ fn compute_streaks(dates: &[String]) -> (i64, i64) {
         }
     }
     if !first_streak_captured {
-        current = streak; // all consecutive
+        current = streak;
     }
     longest = longest.max(streak);
     (current, longest)

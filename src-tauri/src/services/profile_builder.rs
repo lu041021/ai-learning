@@ -8,6 +8,7 @@ pub struct ProfileBuildData {
     pub quiz_history: Vec<QuizHistoryItem>,
     pub concept_scores: Vec<(String, String, f64, i64)>,
     pub completed_lessons: Vec<String>,
+    pub completed_count: i64,
     pub chat_topics: Vec<String>,
     pub streak_days: i64,
     pub completion_pct: f64,
@@ -169,10 +170,7 @@ pub fn build_deep_profile_prompt(data: &ProfileBuildData) -> String {
     DEEP_PROFILE_PROMPT
         .replace("{responses_text}", &data.responses_text)
         .replace("{goal_text}", &data.goal_text)
-        .replace(
-            "{completed_count}",
-            &data.completed_lessons.len().to_string(),
-        )
+        .replace("{completed_count}", &data.completed_count.to_string())
         .replace("{total_lessons}", &data.total_lessons.to_string())
         .replace("{completion_pct}", &format!("{:.1}", data.completion_pct))
         .replace("{total_quizzes}", &data.total_quizzes.to_string())
@@ -226,7 +224,7 @@ pub fn format_full_profile_context(profile: &UserProfileFull) -> String {
     ctx.push_str(&format!(
         "学习数据：完成{completed}/{total}课时（{pct}%）、{quizzes}次测验均分{avg}、连续{streak}天\n",
         completed = profile.total_lessons_completed,
-        total = 0i64,
+        total = profile.total_lessons,
         pct = profile.completion_pct,
         quizzes = profile.total_quizzes_taken,
         avg = profile.avg_quiz_score,
@@ -247,15 +245,29 @@ pub fn format_full_profile_context(profile: &UserProfileFull) -> String {
     ctx
 }
 
+pub struct ProfileStats {
+    pub total_lessons_completed: i64,
+    pub total_lessons: i64,
+    pub total_quizzes_taken: i64,
+    pub avg_quiz_score: f64,
+    pub streak_days: i64,
+    pub completion_pct: f64,
+    pub external_skill_context: Option<String>,
+}
+
 pub fn profile_from_llm_json(
     json_str: &str,
-    total_lessons_completed: i64,
-    total_quizzes_taken: i64,
-    avg_quiz_score: f64,
-    streak_days: i64,
-    completion_pct: f64,
-    external_skill_context: Option<String>,
+    stats: ProfileStats,
 ) -> Result<UserProfileFull, String> {
+    let ProfileStats {
+        total_lessons_completed,
+        total_lessons,
+        total_quizzes_taken,
+        avg_quiz_score,
+        streak_days,
+        completion_pct,
+        external_skill_context,
+    } = stats;
     #[derive(serde::Deserialize)]
     struct RawProfile {
         experience_level: String,
@@ -281,6 +293,7 @@ pub fn profile_from_llm_json(
         weakness_details: raw.weakness_details,
         learning_style: raw.learning_style,
         total_lessons_completed,
+        total_lessons,
         total_quizzes_taken,
         avg_quiz_score,
         streak_days,

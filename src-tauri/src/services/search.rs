@@ -55,16 +55,30 @@ pub fn search_all(
     }
 
     let sql = format!(
-        "SELECT source_type, source_id, title, snippet(search_index, 2, '<mark>', '</mark>', '...', 32) as snippet,
-                context_id, context_type, bm25(search_index, 0, 0, 0, 0, 0) as rank
-         FROM search_index WHERE search_index MATCH ?1
+        "SELECT si.source_type, si.source_id, si.title,
+                snippet(search_index, 3, '<mark>', '</mark>', '...', 32) as snippet,
+                si.context_id, si.context_type,
+                COALESCE(
+                    CASE si.context_type
+                        WHEN 'course'  THEN (SELECT slug FROM courses WHERE id = si.context_id)
+                        WHEN 'chapter' THEN (SELECT c.slug FROM courses c
+                                             JOIN chapters ch ON ch.course_id = c.id
+                                             WHERE ch.id = si.context_id)
+                        WHEN 'lesson'  THEN (SELECT c.slug FROM courses c
+                                             JOIN chapters ch ON ch.course_id = c.id
+                                             JOIN lessons l ON l.chapter_id = ch.id
+                                             WHERE l.id = si.context_id)
+                    END, ''
+                ) as context_slug,
+                bm25(search_index, 0, 0, 10, 1, 0, 0) as rank
+         FROM search_index si WHERE search_index MATCH ?1
          ORDER BY rank
          LIMIT {}",
         limit
     );
 
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let mut rows: Vec<SearchResult> = stmt
+    let rows: Vec<SearchResult> = stmt
         .query_map(rusqlite::params![fts_query], |row| {
             Ok(SearchResult {
                 source_type: row.get(0)?,
@@ -73,44 +87,13 @@ pub fn search_all(
                 snippet: row.get(3)?,
                 context_id: row.get(4)?,
                 context_type: row.get(5)?,
-                context_slug: String::new(),
-                rank: row.get(6)?,
+                context_slug: row.get::<_, String>(6).unwrap_or_default(),
+                rank: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-
-    // Resolve context_slug for each result
-    for r in &mut rows {
-        r.context_slug = match r.source_type.as_str() {
-            "course" => {
-                conn.query_row(
-                    "SELECT slug FROM courses WHERE id = ?1",
-                    rusqlite::params![r.source_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or_default()
-            }
-            "lesson" => {
-                conn.query_row(
-                    "SELECT c.slug FROM courses c JOIN chapters ch ON ch.course_id = c.id WHERE ch.id = (SELECT chapter_id FROM lessons WHERE id = ?1)",
-                    rusqlite::params![r.source_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or_default()
-            }
-            "quiz_question" => {
-                conn.query_row(
-                    "SELECT c.slug FROM courses c JOIN chapters ch ON ch.course_id = c.id JOIN lessons l ON l.chapter_id = ch.id JOIN quizzes qz ON qz.lesson_id = l.id WHERE qz.id = (SELECT quiz_id FROM quiz_questions WHERE id = ?1)",
-                    rusqlite::params![r.source_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or_default()
-            }
-            _ => String::new(),
-        };
-    }
 
     Ok(rows)
 }

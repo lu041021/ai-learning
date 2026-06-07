@@ -27,8 +27,11 @@ fn read_memory_files(dir: &PathBuf) -> String {
             let path = entry.path();
             if path.extension().is_some_and(|ext| ext == "md") {
                 if let Ok(text) = std::fs::read_to_string(&path) {
-                    let truncated = if text.len() > 3000 {
-                        format!("{}...(truncated)", &text[..3000])
+                    let truncated = if text.chars().count() > 3000 {
+                        format!(
+                            "{}...(truncated)",
+                            text.chars().take(3000).collect::<String>()
+                        )
                     } else {
                         text
                     };
@@ -94,7 +97,7 @@ pub async fn analyze_usage(client: &LlmClient) -> Result<UsageProfile, String> {
         format!(
             "解析使用分析失败: {}. Raw: {}",
             e,
-            &cleaned[..200.min(cleaned.len())]
+            &cleaned.chars().take(200).collect::<String>()
         )
     })
 }

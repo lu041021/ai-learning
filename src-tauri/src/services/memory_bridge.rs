@@ -83,39 +83,42 @@ fn build_memory_content(conn: &Connection, user_id: i64) -> String {
         if dates.is_empty() {
             (0i64, 0i64)
         } else {
-            let mut cur = 1i64;
-            let mut best = 1i64;
-            for i in 1..dates.len() {
-                let prev = &dates[i - 1];
-                let cur_date = &dates[i];
-                if prev == cur_date {
-                    continue;
-                }
-                if prev.len() < 10 || cur_date.len() < 10 {
-                    continue;
-                }
-                let prev_day: i64 = prev[8..10].parse().unwrap_or(0);
-                let cur_day: i64 = cur_date[8..10].parse().unwrap_or(0);
-                let prev_month: i64 = prev[5..7].parse().unwrap_or(0);
-                let cur_month: i64 = cur_date[5..7].parse().unwrap_or(0);
-                let prev_year: i64 = prev[..4].parse().unwrap_or(0);
-                let cur_year: i64 = cur_date[..4].parse().unwrap_or(0);
+            use chrono::NaiveDate;
+            let parsed: Vec<NaiveDate> = dates
+                .iter()
+                .filter_map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+                .collect();
 
-                let consecutive =
-                    (cur_year == prev_year && cur_month == prev_month && cur_day == prev_day - 1)
-                        || (cur_year == prev_year
-                            && cur_month == prev_month - 1
-                            && prev_day == 1
-                            && cur_day == 28);
-                if consecutive {
-                    cur += 1;
+            // current streak: count from the most recent date backwards
+            let mut current = 1i64;
+            for i in 1..parsed.len() {
+                if parsed[i - 1] == parsed[i] {
+                    continue;
+                }
+                if parsed[i - 1].pred_opt() == Some(parsed[i]) {
+                    current += 1;
                 } else {
-                    best = best.max(cur);
-                    cur = 1;
+                    break;
                 }
             }
-            best = best.max(cur);
-            (cur, best)
+
+            // longest streak: scan all segments
+            let mut best = 1i64;
+            let mut run = 1i64;
+            for i in 1..parsed.len() {
+                if parsed[i - 1] == parsed[i] {
+                    continue;
+                }
+                if parsed[i - 1].pred_opt() == Some(parsed[i]) {
+                    run += 1;
+                    best = best.max(run);
+                } else {
+                    run = 1;
+                }
+            }
+            best = best.max(run);
+
+            (current, best)
         }
     };
 

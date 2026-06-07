@@ -104,3 +104,9 @@ pub fn get_app_data_dir() -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create app data dir: {}", e))?;
     Ok(dir)
 }
+
+pub fn get_log_dir() -> Result<PathBuf, String> {
+    let dir = get_app_data_dir()?.join("logs");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create log dir: {}", e))?;
+    Ok(dir)
+}

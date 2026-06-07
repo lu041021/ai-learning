@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,19 +59,6 @@ pub fn get_recommendations(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Get completed lesson IDs
-    let completed: HashSet<i64> = {
-        let mut stmt = conn
-            .prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(rusqlite::params![user_id], |row| row.get(0))
-            .map_err(|e| e.to_string())?
-            .collect::<Result<HashSet<i64>, _>>()
-            .map_err(|e| e.to_string())?;
-        rows
-    };
-
     // Get quiz scores per course for affinity
     let course_scores: HashMap<i64, f64> = {
         let mut stmt = conn
@@ -94,34 +81,42 @@ pub fn get_recommendations(
         rows
     };
 
-    // Get concepts linked to each course (via lesson_concepts)
-    let _course_concepts: HashMap<i64, HashSet<i64>> = {
+    // One-shot: completed/total per course
+    let course_progress: HashMap<i64, (i64, i64)> = {
         let mut stmt = conn
             .prepare(
-                "SELECT DISTINCT ch.course_id, lc.concept_id
-                 FROM lesson_concepts lc
-                 JOIN lessons l ON l.id = lc.lesson_id
-                 JOIN chapters ch ON ch.id = l.chapter_id",
+                "SELECT c.id,
+                        COUNT(l.id) as total,
+                        SUM(CASE WHEN up.completed = 1 THEN 1 ELSE 0 END) as done
+                 FROM courses c
+                 JOIN chapters ch ON ch.course_id = c.id
+                 JOIN lessons l ON l.chapter_id = ch.id
+                 LEFT JOIN user_progress up ON up.lesson_id = l.id AND up.user_id = ?1
+                 GROUP BY c.id",
             )
             .map_err(|e| e.to_string())?;
-        let rows: Vec<(i64, i64)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        let rows: Vec<(i64, i64, i64)> = stmt
+            .query_map(rusqlite::params![user_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
             .map_err(|e| e.to_string())?
-            .collect::<Result<_, _>>()
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
-        let mut map: HashMap<i64, HashSet<i64>> = HashMap::new();
-        for (cid, conid) in rows {
-            map.entry(cid).or_default().insert(conid);
-        }
-        map
+        rows.into_iter()
+            .map(|(id, total, done)| (id, (done, total)))
+            .collect()
     };
 
     let mut scored: Vec<RecommendationItem> = courses
         .iter()
-        .map(|(id, title, slug, desc, total)| {
+        .map(|(id, title, slug, desc, _total)| {
             let combined = format!("{} {}", title.to_lowercase(), desc.to_lowercase());
-            let course_completed = course_completed_count(*id, &completed, &conn).unwrap_or(0);
-            let course_total = *total;
+            let (course_completed, course_total) =
+                course_progress.get(id).copied().unwrap_or((0, 0));
 
             // 1. Interest match (40%)
             let interest_score = if interest_lower.is_empty() {
@@ -222,28 +217,4 @@ pub fn get_recommendations(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     Ok(scored)
-}
-
-fn course_completed_count(
-    course_id: i64,
-    completed: &HashSet<i64>,
-    conn: &Connection,
-) -> Result<i64, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT l.id FROM lessons l
-             JOIN chapters ch ON ch.id = l.chapter_id
-             WHERE ch.course_id = ?1",
-        )
-        .map_err(|e| e.to_string())?;
-    let lesson_ids: Vec<i64> = stmt
-        .query_map(rusqlite::params![course_id], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    Ok(lesson_ids
-        .iter()
-        .filter(|&id| completed.contains(id))
-        .count() as i64)
 }

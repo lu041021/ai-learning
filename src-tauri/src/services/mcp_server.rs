@@ -27,29 +27,70 @@ fn json_response(data: Value) -> McpResponse {
     let body = data.to_string();
     Response::from_string(body)
         .with_header(Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
-        .with_header(Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap())
+}
+
+fn with_cors(resp: McpResponse, origin: &str) -> McpResponse {
+    resp.with_header(
+        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], origin.as_bytes()).unwrap(),
+    )
+}
+
+fn unauthorized() -> McpResponse {
+    json_response(
+        json!({"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Unauthorized"}}),
+    )
+    .with_status_code(401)
 }
 
 fn read_body(request: &mut tiny_http::Request) -> Result<Value, McpResponse> {
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
-        return Err(json_response(json!({
-            "jsonrpc":"2.0","id":null,
-            "error":{"code":-32700,"message":"Parse error"}
-        })));
+        return Err(json_response(
+            json!({"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}),
+        ));
     }
     serde_json::from_str(&body).map_err(|e| {
-        json_response(json!({
-            "jsonrpc":"2.0","id":null,
-            "error":{"code":-32700,"message":format!("Parse error: {}", e)}
-        }))
+        json_response(json!({"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":format!("Parse error: {}", e)}}))
     })
+}
+
+fn check_auth(request: &tiny_http::Request, token: &str, allowed_origin: &str) -> Option<String> {
+    let origin = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Origin"))
+        .map(|h| h.value.as_str().to_owned())
+        .unwrap_or_default();
+
+    if !origin.is_empty() && origin != allowed_origin {
+        return None;
+    }
+
+    let auth = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Authorization"))
+        .map(|h| h.value.as_str().to_owned())
+        .unwrap_or_default();
+
+    let expected = format!("Bearer {}", token);
+    if auth != expected {
+        return None;
+    }
+
+    Some(origin)
 }
 
 fn handle_mcp_request(
     request: &mut tiny_http::Request,
     db: &Arc<Mutex<Connection>>,
+    token: &str,
+    allowed_origin: &str,
 ) -> McpResponse {
+    if check_auth(request, token, allowed_origin).is_none() {
+        return unauthorized();
+    }
+
     let req_body = match read_body(request) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -251,7 +292,7 @@ fn handle_resources_list(id: Value, db: &Arc<Mutex<Connection>>) -> McpResponse 
         "description":"List of all courses in the learning platform","mimeType":"application/json"
     })];
 
-    if let Ok(mut stmt) = conn.prepare("SELECT slug, title FROM courses ORDER BY id") {
+    if let Ok(mut stmt) = conn.prepare("SELECT slug, title FROM courses ORDER BY id LIMIT 200") {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         }) {
@@ -315,7 +356,9 @@ fn handle_resources_read(id: Value, params: &Value, db: &Arc<Mutex<Connection>>)
 fn tool_list_courses(db: &Arc<Mutex<Connection>>) -> Result<String, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT id, title, slug, description, source_type FROM courses ORDER BY id")
+        .prepare(
+            "SELECT id, title, slug, description, source_type FROM courses ORDER BY id LIMIT 200",
+        )
         .map_err(|e| e.to_string())?;
     let rows: Vec<Value> = stmt
         .query_map([], |row| {
@@ -505,37 +548,31 @@ fn tool_get_dashboard(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Strin
 
     let mut course_stmt = conn
         .prepare(
-            "SELECT c.id, c.title, c.slug, COUNT(l.id) as total
+            "SELECT c.id, c.title, c.slug,
+                    COUNT(l.id) as total,
+                    SUM(CASE WHEN up.completed = 1 THEN 1 ELSE 0 END) as done
              FROM courses c
              JOIN chapters ch ON ch.course_id = c.id
              JOIN lessons l ON l.chapter_id = ch.id
+             LEFT JOIN user_progress up ON up.lesson_id = l.id AND up.user_id = ?1
              GROUP BY c.id",
         )
         .map_err(|e| e.to_string())?;
     let course_progress: Vec<Value> = course_stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![user_id], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
             ))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?
         .into_iter()
-        .map(|(cid, title, slug, total)| {
-            let completed: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM user_progress up
-                     JOIN lessons l ON l.id = up.lesson_id
-                     JOIN chapters ch ON ch.id = l.chapter_id
-                     WHERE ch.course_id = ?1 AND up.user_id = ?2 AND up.completed = 1",
-                    rusqlite::params![cid, user_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+        .map(|(cid, title, slug, total, completed)| {
             json!({
                 "course_id": cid, "title": title, "slug": slug,
                 "total_lessons": total, "completed_lessons": completed
@@ -566,7 +603,7 @@ fn tool_search_courses(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Stri
     let conn = db.lock().map_err(|e| e.to_string())?;
     let pattern = format!("%{}%", query);
     let mut stmt = conn
-        .prepare("SELECT id, title, slug, description FROM courses WHERE title LIKE ?1 ORDER BY id")
+        .prepare("SELECT id, title, slug, description FROM courses WHERE title LIKE ?1 ORDER BY id LIMIT 50")
         .map_err(|e| e.to_string())?;
     let rows: Vec<Value> = stmt
         .query_map(rusqlite::params![pattern], |row| {
@@ -654,16 +691,37 @@ fn tool_get_learning_path(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<S
     let user_id = arg_i64(args, "user_id", 1);
 
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let path: Option<String> = conn
+    let result: Option<(i64, String, String, String)> = conn
         .query_row(
-            "SELECT path_data FROM learning_paths WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 1",
+            "SELECT id, steps_json, generated_at, updated_at
+             FROM learning_path_history
+             WHERE user_id = ?1 AND is_active = 1
+             ORDER BY version DESC LIMIT 1",
             rusqlite::params![user_id],
-            |row| row.get(0),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get::<_, String>(2).unwrap_or_default(),
+                    row.get::<_, String>(3).unwrap_or_default(),
+                ))
+            },
         )
         .ok();
 
-    match path {
-        Some(data) => Ok(data),
+    match result {
+        Some((id, steps_json, generated_at, updated_at)) => {
+            let steps: serde_json::Value =
+                serde_json::from_str(&steps_json).unwrap_or(serde_json::Value::Array(vec![]));
+            Ok(json!({
+                "id": id,
+                "user_id": user_id,
+                "steps": steps,
+                "generated_at": generated_at,
+                "updated_at": updated_at
+            })
+            .to_string())
+        }
         None => Ok(
             json!({"message":"No learning path generated yet. Use the app to generate one first."})
                 .to_string(),
@@ -716,7 +774,8 @@ fn tool_get_analytics(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Strin
 
 // ─── Public API ───
 
-pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16) {
+pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16, token: String) {
+    let allowed_origin = "tauri://localhost".to_string();
     std::thread::spawn(move || {
         let addr = format!("127.0.0.1:{}", port);
         let server = match Server::http(&addr) {
@@ -731,36 +790,46 @@ pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16) {
         for mut request in server.incoming_requests() {
             let path = request.url().to_string();
             let method = request.method().clone();
+            let db_clone = Arc::clone(&db);
+            let token_clone = token.clone();
+            let origin_clone = allowed_origin.clone();
 
-            if method == Method::Post && path == "/mcp" {
-                let response = handle_mcp_request(&mut request, &db);
-                let _ = request.respond(response);
-            } else if method == Method::Get && path == "/health" {
-                let _ = request.respond(Response::from_string("ok"));
-            } else if method == Method::Options {
-                // CORS preflight — allow local origins
-                let resp = Response::from_string("")
-                    .with_header(
-                        Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap(),
-                    )
-                    .with_header(
-                        Header::from_bytes(
-                            &b"Access-Control-Allow-Methods"[..],
-                            &b"POST, GET, OPTIONS"[..],
+            std::thread::spawn(move || {
+                if method == Method::Post && path == "/mcp" {
+                    let response =
+                        handle_mcp_request(&mut request, &db_clone, &token_clone, &origin_clone);
+                    let _ = request.respond(with_cors(response, &origin_clone));
+                } else if method == Method::Get && path == "/health" {
+                    let _ = request.respond(Response::from_string("ok"));
+                } else if method == Method::Options {
+                    let resp = Response::from_string("")
+                        .with_header(
+                            Header::from_bytes(
+                                &b"Access-Control-Allow-Origin"[..],
+                                origin_clone.as_bytes(),
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    )
-                    .with_header(
-                        Header::from_bytes(
-                            &b"Access-Control-Allow-Headers"[..],
-                            &b"Content-Type"[..],
+                        .with_header(
+                            Header::from_bytes(
+                                &b"Access-Control-Allow-Methods"[..],
+                                &b"POST, GET, OPTIONS"[..],
+                            )
+                            .unwrap(),
                         )
-                        .unwrap(),
-                    );
-                let _ = request.respond(resp);
-            } else {
-                let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
-            }
+                        .with_header(
+                            Header::from_bytes(
+                                &b"Access-Control-Allow-Headers"[..],
+                                &b"Content-Type, Authorization"[..],
+                            )
+                            .unwrap(),
+                        );
+                    let _ = request.respond(resp);
+                } else {
+                    let _ =
+                        request.respond(Response::from_string("Not Found").with_status_code(404));
+                }
+            });
         }
     });
 }

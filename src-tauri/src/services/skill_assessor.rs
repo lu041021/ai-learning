@@ -46,7 +46,7 @@ pub async fn assess_skill(
         format!(
             "Failed to parse AI assessment: {}. Raw: {}",
             e,
-            &cleaned[..200.min(cleaned.len())]
+            &cleaned.chars().take(200).collect::<String>()
         )
     })
 }
@@ -182,25 +182,17 @@ pub async fn generate_path(
         .map_err(|e| format!("LLM 请求失败: {e}"))?;
 
     let cleaned = clean_json_response(&response_text);
-    eprintln!(
-        "[generate_path] response len={} cleaned len={}",
-        response_text.len(),
-        cleaned.len()
-    );
     let mut steps: Vec<crate::models::learning_path::LearningPathStep> =
         serde_json::from_str(&cleaned).map_err(|e| {
             format!(
                 "解析学习路线 JSON 失败: {}. 原始内容(前500字符): {}",
                 e,
-                &cleaned[..500.min(cleaned.len())]
+                &cleaned.chars().take(500).collect::<String>()
             )
         })?;
 
     for step in &mut steps {
         step.status = "available".to_string();
-    }
-    if !steps.is_empty() {
-        steps[0].status = "available".to_string();
     }
 
     Ok(steps)
@@ -275,15 +267,12 @@ pub async fn generate_goal_path(
             format!(
                 "解析学习路线 JSON 失败: {}. 原始内容(前500字符): {}",
                 e,
-                &cleaned[..500.min(cleaned.len())]
+                &cleaned.chars().take(500).collect::<String>()
             )
         })?;
 
     for step in &mut steps {
         step.status = "available".to_string();
-    }
-    if !steps.is_empty() {
-        steps[0].status = "available".to_string();
     }
 
     Ok(steps)
@@ -363,15 +352,12 @@ pub async fn generate_path_from_profile(
             format!(
                 "解析学习路线 JSON 失败: {}. 原始内容(前500字符): {}",
                 e,
-                &cleaned[..500.min(cleaned.len())]
+                &cleaned.chars().take(500).collect::<String>()
             )
         })?;
 
     for step in &mut steps {
         step.status = "available".to_string();
-    }
-    if !steps.is_empty() {
-        steps[0].status = "available".to_string();
     }
 
     Ok(steps)

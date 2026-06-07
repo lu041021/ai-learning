@@ -128,45 +128,32 @@ fn build_course_progress(
 ) -> Result<Vec<CourseProgressItem>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT c.id, c.title, c.slug, COUNT(l.id) as total
+            "SELECT c.id, c.title, c.slug,
+                    COUNT(l.id) as total,
+                    COUNT(CASE WHEN up.completed = 1 THEN 1 END) as completed
              FROM courses c
              JOIN chapters ch ON ch.course_id = c.id
              JOIN lessons l ON l.chapter_id = ch.id
-             GROUP BY c.id",
+             LEFT JOIN user_progress up ON up.lesson_id = l.id AND up.user_id = ?1
+             GROUP BY c.id
+             ORDER BY c.id",
         )
         .map_err(|e| e.to_string())?;
 
-    let courses: Vec<(i64, String, String, i64)> = stmt
-        .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+    let rows = stmt
+        .query_map(rusqlite::params![user_id], |row| {
+            Ok(CourseProgressItem {
+                course_id: row.get(0)?,
+                title: row.get(1)?,
+                slug: row.get(2)?,
+                total_lessons: row.get(3)?,
+                completed_lessons: row.get(4)?,
+            })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
-
-    let mut completed_stmt = conn
-        .prepare(
-            "SELECT COUNT(*) FROM user_progress up
-             JOIN lessons l ON l.id = up.lesson_id
-             JOIN chapters ch ON ch.id = l.chapter_id
-             WHERE ch.course_id = ?1 AND up.user_id = ?2 AND up.completed = 1",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let mut result = Vec::new();
-    for (id, title, slug, total) in courses {
-        let completed: i64 = completed_stmt
-            .query_row(rusqlite::params![id, user_id], |row| row.get(0))
-            .unwrap_or(0);
-        result.push(CourseProgressItem {
-            course_id: id,
-            title,
-            slug,
-            total_lessons: total,
-            completed_lessons: completed,
-        });
-    }
-    Ok(result)
+    Ok(rows)
 }
 
 fn build_calendar_days(conn: &Connection, user_id: i64) -> Result<Vec<CalendarDay>, String> {
@@ -195,103 +182,116 @@ fn build_calendar_days(conn: &Connection, user_id: i64) -> Result<Vec<CalendarDa
 }
 
 fn build_knowledge_tree(conn: &Connection, user_id: i64) -> Result<Vec<TreeNodeData>, String> {
-    let mut course_stmt = conn
-        .prepare("SELECT id, title, slug FROM courses ORDER BY id")
+    // One query: all courses + chapters (ordered)
+    let mut ch_stmt = conn
+        .prepare(
+            "SELECT c.id, c.title, c.slug, ch.id, ch.title
+             FROM courses c
+             JOIN chapters ch ON ch.course_id = c.id
+             ORDER BY c.id, ch.order_index",
+        )
         .map_err(|e| e.to_string())?;
-
-    let courses: Vec<(i64, String, String)> = course_stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+    let ch_rows: Vec<(i64, String, String, i64, String)> = ch_stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut chapter_stmt = conn
-        .prepare("SELECT id, title FROM chapters WHERE course_id = ?1 ORDER BY order_index")
-        .map_err(|e| e.to_string())?;
-
-    let mut lesson_stmt = conn
+    // One query: all lessons with completion status (ordered)
+    let mut l_stmt = conn
         .prepare(
-            "SELECT l.id, l.title,
+            "SELECT l.chapter_id, l.id, l.title,
                     CASE WHEN up.completed = 1 OR qa.score >= 0.7 THEN 1 ELSE 0 END as is_completed
              FROM lessons l
-             LEFT JOIN user_progress up ON up.lesson_id = l.id AND up.user_id = ?2
+             LEFT JOIN user_progress up ON up.lesson_id = l.id AND up.user_id = ?1
              LEFT JOIN quizzes qz ON qz.lesson_id = l.id
-             LEFT JOIN quiz_attempts qa ON qa.quiz_id = qz.id AND qa.user_id = ?2
-             WHERE l.chapter_id = ?1
-             ORDER BY l.order_index",
+             LEFT JOIN quiz_attempts qa ON qa.quiz_id = qz.id AND qa.user_id = ?1
+             ORDER BY l.chapter_id, l.order_index",
         )
         .map_err(|e| e.to_string())?;
+    // chapter_id -> Vec<(lesson_id, title, completed)>
+    let mut lessons_by_chapter: std::collections::HashMap<i64, Vec<(i64, String, bool)>> =
+        std::collections::HashMap::new();
+    l_stmt
+        .query_map(rusqlite::params![user_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)? != 0,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .for_each(|(ch_id, l_id, l_title, completed)| {
+            lessons_by_chapter
+                .entry(ch_id)
+                .or_default()
+                .push((l_id, l_title, completed));
+        });
 
-    let mut result = Vec::new();
-    for (course_id, course_title, slug) in courses {
-        let chapters: Vec<(i64, String)> = chapter_stmt
-            .query_map(rusqlite::params![course_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+    // Assemble tree in memory
+    let mut result: Vec<TreeNodeData> = Vec::new();
+    let mut last_course_id = -1i64;
 
-        let mut course_node = TreeNodeData {
-            id: course_id,
-            title: course_title,
-            kind: "course".to_string(),
-            completed: false,
-            children: Vec::new(),
-            course_slug: Some(slug),
-        };
-
-        let mut all_lessons_completed = true;
-        let mut has_lessons = false;
-
-        for (ch_id, ch_title) in chapters {
-            let lessons: Vec<(i64, String, bool)> = lesson_stmt
-                .query_map(rusqlite::params![ch_id, user_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get::<_, i64>(2)? != 0))
-                })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-
-            let mut chapter_node = TreeNodeData {
-                id: ch_id,
-                title: ch_title,
-                kind: "chapter".to_string(),
+    for (course_id, course_title, slug, ch_id, ch_title) in ch_rows {
+        if course_id != last_course_id {
+            result.push(TreeNodeData {
+                id: course_id,
+                title: course_title,
+                kind: "course".to_string(),
                 completed: false,
                 children: Vec::new(),
+                course_slug: Some(slug),
+            });
+            last_course_id = course_id;
+        }
+
+        let course_node = result.last_mut().unwrap();
+        let lessons = lessons_by_chapter.remove(&ch_id).unwrap_or_default();
+
+        let lesson_nodes: Vec<TreeNodeData> = lessons
+            .into_iter()
+            .map(|(l_id, l_title, l_completed)| TreeNodeData {
+                id: l_id,
+                title: l_title,
+                kind: "lesson".to_string(),
+                completed: l_completed,
+                children: Vec::new(),
                 course_slug: None,
-            };
+            })
+            .collect();
+        let ch_all_done = !lesson_nodes.is_empty() && lesson_nodes.iter().all(|l| l.completed);
+        let chapter_node = TreeNodeData {
+            id: ch_id,
+            title: ch_title,
+            kind: "chapter".to_string(),
+            completed: ch_all_done,
+            children: lesson_nodes,
+            course_slug: None,
+        };
+        course_node.children.push(chapter_node);
+    }
 
-            let mut ch_all_completed = true;
-            let mut ch_has_lessons = false;
-
-            for (l_id, l_title, l_completed) in lessons {
-                ch_has_lessons = true;
-                has_lessons = true;
-                if !l_completed {
-                    ch_all_completed = false;
-                    all_lessons_completed = false;
-                }
-                chapter_node.children.push(TreeNodeData {
-                    id: l_id,
-                    title: l_title,
-                    kind: "lesson".to_string(),
-                    completed: l_completed,
-                    children: Vec::new(),
-                    course_slug: None,
-                });
-            }
-
-            if ch_has_lessons {
-                chapter_node.completed = ch_all_completed;
-            }
-            course_node.children.push(chapter_node);
-        }
-
+    // Compute course-level completion from children
+    for course in &mut result {
+        let has_lessons = course.children.iter().any(|ch| !ch.children.is_empty());
         if has_lessons {
-            course_node.completed = all_lessons_completed;
+            course.completed = course
+                .children
+                .iter()
+                .all(|ch| ch.children.is_empty() || ch.completed);
         }
-        result.push(course_node);
     }
 
     Ok(result)

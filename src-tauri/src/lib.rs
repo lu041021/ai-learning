@@ -12,15 +12,28 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+pub struct McpToken(pub String);
+
+fn generate_token() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let mut h = DefaultHasher::new();
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        .hash(&mut h);
+    std::process::id().hash(&mut h);
+    format!("{:x}{:x}", h.finish(), h.finish().wrapping_mul(0xdeadbeef))
+}
+
 fn install_panic_hook() {
     use std::io::Write;
     std::panic::set_hook(Box::new(|info| {
         let msg = info.to_string();
-        if let Some(log_dir) = dirs::data_local_dir() {
-            let log_path = log_dir.join("ai-learning").join("panic.log");
-            if let Some(parent) = log_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
+        if let Ok(log_dir) = config::get_log_dir() {
+            let log_path = log_dir.join("panic.log");
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -64,9 +77,11 @@ pub fn run() {
                 HashMap::<i64, Arc<AtomicBool>>::new(),
             )));
 
-            // Start MCP server on port 9529
+            // Start MCP server on port 9529 with a session-scoped token
             let mcp_port: u16 = 9529;
-            services::mcp_server::start_mcp_server(db, mcp_port);
+            let mcp_token = generate_token();
+            app.manage(McpToken(mcp_token.clone()));
+            services::mcp_server::start_mcp_server(db, mcp_port, mcp_token);
             println!("[MCP] Server started on http://127.0.0.1:{}", mcp_port);
 
             Ok(())
@@ -90,6 +105,7 @@ pub fn run() {
             commands::config_cmd::get_config,
             commands::config_cmd::set_config,
             commands::config_cmd::log_frontend_error,
+            commands::config_cmd::get_mcp_token,
             commands::skill_assessment::assess_user_skill,
             commands::skill_assessment::get_user_profile,
             commands::skill_assessment::generate_learning_path,

@@ -78,6 +78,7 @@ pub struct UserProfileFull {
     pub weakness_details: Vec<WeaknessDetail>,
     pub learning_style: LearningStyleProfile,
     pub total_lessons_completed: i64,
+    pub total_lessons: i64,
     pub total_quizzes_taken: i64,
     pub avg_quiz_score: f64,
     pub streak_days: i64,

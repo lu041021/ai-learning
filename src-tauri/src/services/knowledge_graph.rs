@@ -62,7 +62,11 @@ pub fn build_knowledge_graph(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Build edges by co-occurrence (Jaccard similarity threshold > 0)
+    // Build concept_id -> node index for O(1) lookups in layout
+    let concept_index: HashMap<i64, usize> =
+        nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
+
+    // Build edges via inverted co-occurrence: for each lesson, pair its concepts
     let mut lesson_to_concepts: HashMap<i64, HashSet<i64>> = HashMap::new();
     let mut lc_stmt = conn
         .prepare("SELECT lesson_id, concept_id FROM lesson_concepts")
@@ -80,38 +84,47 @@ pub fn build_knowledge_graph(
             .insert(*concept_id);
     }
 
-    let concept_ids: Vec<i64> = nodes.iter().map(|n| n.id).collect();
-    let mut edges: Vec<ConceptEdge> = Vec::new();
-
-    for i in 0..concept_ids.len() {
-        for j in (i + 1)..concept_ids.len() {
-            let a = concept_ids[i];
-            let b = concept_ids[j];
-
-            let mut shared = 0u32;
-            for lessons in lesson_to_concepts.values() {
-                if lessons.contains(&a) && lessons.contains(&b) {
-                    shared += 1;
+    // shared[(a,b)] = number of lessons both a and b appear in
+    let mut shared_map: HashMap<(i64, i64), u32> = HashMap::new();
+    // appears[(a)] = number of lessons a appears in
+    let mut appears: HashMap<i64, u32> = HashMap::new();
+    for concepts in lesson_to_concepts.values() {
+        let ids: Vec<i64> = concepts.iter().copied().collect();
+        for &c in &ids {
+            *appears.entry(c).or_insert(0) += 1;
+        }
+        for i in 0..ids.len() {
+            for j in (i + 1)..ids.len() {
+                let (a, b) = if ids[i] < ids[j] {
+                    (ids[i], ids[j])
+                } else {
+                    (ids[j], ids[i])
+                };
+                // only track pairs where both are in our node set
+                if concept_index.contains_key(&a) && concept_index.contains_key(&b) {
+                    *shared_map.entry((a, b)).or_insert(0) += 1;
                 }
-            }
-
-            if shared > 0 {
-                let union = lesson_to_concepts
-                    .values()
-                    .filter(|ls| ls.contains(&a) || ls.contains(&b))
-                    .count() as f64;
-                let weight = shared as f64 / union.max(1.0);
-                edges.push(ConceptEdge {
-                    source_id: a,
-                    target_id: b,
-                    weight: (weight * 100.0).round() / 100.0,
-                });
             }
         }
     }
 
+    let edges: Vec<ConceptEdge> = shared_map
+        .into_iter()
+        .map(|((a, b), shared)| {
+            let union = (appears.get(&a).copied().unwrap_or(0)
+                + appears.get(&b).copied().unwrap_or(0))
+            .saturating_sub(shared) as f64;
+            let weight = shared as f64 / union.max(1.0);
+            ConceptEdge {
+                source_id: a,
+                target_id: b,
+                weight: (weight * 100.0).round() / 100.0,
+            }
+        })
+        .collect();
+
     // Compute force-directed layout
-    let positions = compute_layout(&nodes, &edges);
+    let positions = compute_layout(&nodes, &edges, &concept_index);
 
     Ok(KnowledgeGraphData {
         nodes,
@@ -120,7 +133,11 @@ pub fn build_knowledge_graph(
     })
 }
 
-fn compute_layout(nodes: &[ConceptNode], edges: &[ConceptEdge]) -> Vec<[f64; 2]> {
+fn compute_layout(
+    nodes: &[ConceptNode],
+    edges: &[ConceptEdge],
+    concept_index: &HashMap<i64, usize>,
+) -> Vec<[f64; 2]> {
     let n = nodes.len();
     if n == 0 {
         return Vec::new();
@@ -160,8 +177,8 @@ fn compute_layout(nodes: &[ConceptNode], edges: &[ConceptEdge]) -> Vec<[f64; 2]>
 
         // Attractive forces along edges
         for edge in edges {
-            let si = nodes.iter().position(|nd| nd.id == edge.source_id);
-            let ti = nodes.iter().position(|nd| nd.id == edge.target_id);
+            let si = concept_index.get(&edge.source_id).copied();
+            let ti = concept_index.get(&edge.target_id).copied();
             if let (Some(si), Some(ti)) = (si, ti) {
                 let dx = positions[si][0] - positions[ti][0];
                 let dy = positions[si][1] - positions[ti][1];
@@ -198,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_layout_empty() {
-        let positions = compute_layout(&[], &[]);
+        let positions = compute_layout(&[], &[], &std::collections::HashMap::new());
         assert!(positions.is_empty());
     }
 
@@ -211,7 +228,7 @@ mod tests {
             lesson_count: 3,
             completed_count: 1,
         }];
-        let positions = compute_layout(&nodes, &[]);
+        let positions = compute_layout(&nodes, &[], &std::collections::HashMap::new());
         assert_eq!(positions.len(), 1);
         assert!(positions[0][0].is_finite());
         assert!(positions[0][1].is_finite());
@@ -228,7 +245,7 @@ mod tests {
                 completed_count: 0,
             })
             .collect();
-        let positions = compute_layout(&nodes, &[]);
+        let positions = compute_layout(&nodes, &[], &std::collections::HashMap::new());
         assert_eq!(positions.len(), 5);
         // All positions should be finite
         for pos in &positions {
@@ -274,7 +291,8 @@ mod tests {
                 weight: 0.5,
             },
         ];
-        let positions = compute_layout(&nodes, &edges);
+        let idx: HashMap<i64, usize> = nodes.iter().enumerate().map(|(i, n)| (n.id, i)).collect();
+        let positions = compute_layout(&nodes, &edges, &idx);
         assert_eq!(positions.len(), 3);
         // Nodes with edges should be pulled closer together
         // Just verify positions are valid (finite, not all identical)

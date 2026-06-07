@@ -8,16 +8,22 @@ use crate::models::course::{
 };
 
 #[tauri::command]
-pub fn list_courses(db: State<'_, Arc<Mutex<Connection>>>) -> Result<Vec<CourseSummary>, String> {
+pub fn list_courses(
+    db: State<'_, Arc<Mutex<Connection>>>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<Vec<CourseSummary>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
+    let limit = limit.unwrap_or(200);
+    let offset = offset.unwrap_or(0);
     let mut stmt = conn
         .prepare(
             "SELECT id, title, slug, description, difficulty, duration_minutes, tags \
-             FROM courses ORDER BY id",
+             FROM courses ORDER BY id LIMIT ?1 OFFSET ?2",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![limit, offset], |row| {
             let tags_json: String = row.get::<_, String>(6).unwrap_or_else(|_| "[]".to_string());
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
             Ok(CourseSummary {
@@ -62,50 +68,65 @@ pub fn get_course(
                 ))
             },
         )
-        .map_err(|e| format!("Course not found: {}", e))?;
+        .map_err(|e| {
+            if e == rusqlite::Error::QueryReturnedNoRows {
+                format!("Course not found: {}", slug)
+            } else {
+                e.to_string()
+            }
+        })?;
 
-    let mut ch_stmt = conn
+    let mut l_stmt = conn
         .prepare(
-            "SELECT id, title, order_index FROM chapters WHERE course_id = ?1 ORDER BY order_index",
+            "SELECT ch.id, ch.title, ch.order_index, l.id, l.title, l.order_index, l.duration_minutes
+             FROM chapters ch
+             JOIN lessons l ON l.chapter_id = ch.id
+             WHERE ch.course_id = ?1
+             ORDER BY ch.order_index, l.order_index",
         )
         .map_err(|e| e.to_string())?;
-    let chapters: Vec<(i64, String, i64)> = ch_stmt
+    let lesson_rows: Vec<(i64, String, i64, i64, String, i64, i64)> = l_stmt
         .query_map(rusqlite::params![course.0], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get::<_, i64>(6).unwrap_or(0),
+            ))
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let _chapter_ids: Vec<i64> = chapters.iter().map(|c| c.0).collect();
-    let mut chapters_out = Vec::new();
-
-    for (ch_id, ch_title, ch_order) in &chapters {
-        let mut l_stmt = conn
-            .prepare(
-                "SELECT id, title, order_index, duration_minutes FROM lessons \
-                 WHERE chapter_id = ?1 ORDER BY order_index",
-            )
-            .map_err(|e| e.to_string())?;
-        let lessons: Vec<LessonSummary> = l_stmt
-            .query_map(rusqlite::params![ch_id], |row| {
-                Ok(LessonSummary {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    order_index: row.get(2)?,
-                    duration_minutes: row.get::<_, i64>(3).unwrap_or(0),
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-
-        chapters_out.push(ChapterDetail {
-            id: *ch_id,
-            title: ch_title.clone(),
-            order_index: *ch_order,
-            lessons,
-        });
+    // Assemble chapters in memory
+    let mut chapters_out: Vec<ChapterDetail> = Vec::new();
+    for (ch_id, ch_title, ch_order, l_id, l_title, l_order, l_dur) in lesson_rows {
+        match chapters_out.last_mut() {
+            Some(ch) if ch.id == ch_id => {
+                ch.lessons.push(LessonSummary {
+                    id: l_id,
+                    title: l_title,
+                    order_index: l_order,
+                    duration_minutes: l_dur,
+                });
+            }
+            _ => {
+                chapters_out.push(ChapterDetail {
+                    id: ch_id,
+                    title: ch_title,
+                    order_index: ch_order,
+                    lessons: vec![LessonSummary {
+                        id: l_id,
+                        title: l_title,
+                        order_index: l_order,
+                        duration_minutes: l_dur,
+                    }],
+                });
+            }
+        }
     }
 
     let tags: Vec<String> = serde_json::from_str(&course.6).unwrap_or_default();

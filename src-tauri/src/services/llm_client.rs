@@ -1,6 +1,7 @@
 use futures_util::Stream;
 use reqwest::Client as ReqwestClient;
 use serde_json::json;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::LazyLock;
 use std::task::{Context, Poll};
@@ -185,6 +186,12 @@ impl LlmClient {
             .await
             .map_err(|e| format!("API 请求失败: {}", e))?;
 
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("API 返回错误 {}: {}", status, body));
+        }
+
         let stream: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>> =
             Box::pin(response.bytes_stream());
         let provider = self.provider;
@@ -192,8 +199,8 @@ impl LlmClient {
         Ok(Box::pin(SseStream {
             inner: stream,
             provider,
-            buffer: String::new(),
-            pending_tokens: Vec::new(),
+            buffer: Vec::new(),
+            pending_tokens: VecDeque::new(),
         }))
     }
 }
@@ -201,55 +208,95 @@ impl LlmClient {
 struct SseStream {
     inner: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
     provider: LlmProvider,
-    buffer: String,
-    pending_tokens: Vec<String>,
+    buffer: Vec<u8>,
+    pending_tokens: VecDeque<String>,
+}
+
+impl SseStream {
+    fn process_line(&self, line: &str, out: &mut Vec<String>) {
+        if line.is_empty() || !line.starts_with("data: ") {
+            return;
+        }
+        let data_str = &line[6..];
+        if data_str == "[DONE]" {
+            return;
+        }
+        if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_str) {
+            if let Some(token) = self.provider.parse_stream_delta(&data) {
+                if !token.is_empty() {
+                    out.push(token);
+                }
+            }
+        }
+    }
+
+    fn drain_complete_lines(&mut self, done: bool) -> (Vec<String>, bool) {
+        let mut tokens = Vec::new();
+        let mut saw_done = false;
+
+        loop {
+            match self.buffer.iter().position(|&b| b == b'\n') {
+                Some(pos) => {
+                    let line_bytes = self.buffer[..pos].to_vec();
+                    self.buffer.drain(..=pos);
+                    if let Ok(line) = std::str::from_utf8(&line_bytes) {
+                        let line = line.trim();
+                        if line.starts_with("data: ") && &line[6..] == "[DONE]" {
+                            saw_done = true;
+                        } else {
+                            self.process_line(line, &mut tokens);
+                        }
+                    }
+                }
+                None => {
+                    if done && !self.buffer.is_empty() {
+                        // flush remaining bytes at EOF
+                        let line_bytes = std::mem::take(&mut self.buffer);
+                        if let Ok(line) = std::str::from_utf8(&line_bytes) {
+                            self.process_line(line.trim(), &mut tokens);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        (tokens, saw_done)
+    }
 }
 
 impl Stream for SseStream {
     type Item = Result<String, String>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // Return buffered tokens from previous chunk first
-        if let Some(_token) = self.pending_tokens.first() {
-            let token = self.pending_tokens.remove(0);
-            return Poll::Ready(Some(Ok(token)));
+        if !self.pending_tokens.is_empty() {
+            return Poll::Ready(Some(Ok(self.pending_tokens.pop_front().unwrap())));
         }
 
         loop {
             match self.inner.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(chunk))) => {
-                    let text = String::from_utf8_lossy(&chunk);
-                    self.buffer.push_str(&text);
-
-                    while let Some(pos) = self.buffer.find('\n') {
-                        let line = self.buffer[..pos].trim().to_string();
-                        self.buffer = self.buffer[pos + 1..].to_string();
-
-                        if line.is_empty() || !line.starts_with("data: ") {
-                            continue;
-                        }
-                        let data_str = &line[6..];
-                        if data_str == "[DONE]" {
-                            return Poll::Ready(None);
-                        }
-                        if let Ok(data) = serde_json::from_str::<serde_json::Value>(data_str) {
-                            if let Some(token) = self.provider.parse_stream_delta(&data) {
-                                if !token.is_empty() {
-                                    self.pending_tokens.push(token);
-                                }
-                            }
-                        }
+                    self.buffer.extend_from_slice(&chunk);
+                    let (mut tokens, saw_done) = self.drain_complete_lines(false);
+                    if saw_done {
+                        return Poll::Ready(None);
                     }
-
+                    self.pending_tokens.extend(tokens.drain(..));
                     if !self.pending_tokens.is_empty() {
-                        let token = self.pending_tokens.remove(0);
-                        return Poll::Ready(Some(Ok(token)));
+                        return Poll::Ready(Some(Ok(self.pending_tokens.pop_front().unwrap())));
                     }
                 }
                 Poll::Ready(Some(Err(e))) => {
                     return Poll::Ready(Some(Err(format!("Stream error: {}", e))));
                 }
-                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Ready(None) => {
+                    // Flush any remaining buffer content
+                    let (mut tokens, _) = self.drain_complete_lines(true);
+                    if !tokens.is_empty() {
+                        self.pending_tokens.extend(tokens.drain(..));
+                        return Poll::Ready(Some(Ok(self.pending_tokens.pop_front().unwrap())));
+                    }
+                    return Poll::Ready(None);
+                }
                 Poll::Pending => return Poll::Pending,
             }
         }

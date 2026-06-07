@@ -49,11 +49,12 @@ pub async fn grade_quiz(
         } else {
             "(no answer)"
         };
-        let correct_ans_text = if (q.correct_answer_index as usize) < options.len() {
-            &options[q.correct_answer_index as usize]
-        } else {
-            "?"
-        };
+        let correct_ans_text =
+            if q.correct_answer_index >= 0 && (q.correct_answer_index as usize) < options.len() {
+                &options[q.correct_answer_index as usize]
+            } else {
+                "?"
+            };
 
         qa_pairs.push(format!(
             "Q{}: {}\n  Student answered: [{}] {}\n  Correct answer: [{}] {}\n  Explanation: {}",

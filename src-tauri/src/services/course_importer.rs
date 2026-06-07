@@ -141,6 +141,25 @@ pub async fn fetch_url_content(url: &str) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("Mozilla/5.0 (compatible; AI-Learning-Platform/1.0)")
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let url = attempt.url();
+            let host = url.host_str().unwrap_or("");
+            if host == "localhost"
+                || host == "127.0.0.1"
+                || host == "::1"
+                || host == "0.0.0.0"
+                || host == "169.254.169.254"
+                || host.starts_with("10.")
+                || host.starts_with("192.168.")
+                || host.starts_with("172.")
+            {
+                attempt.error("Redirect to private address blocked")
+            } else if attempt.previous().len() >= 5 {
+                attempt.error("Too many redirects")
+            } else {
+                attempt.follow()
+            }
+        }))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -195,6 +214,20 @@ pub fn extract_text_from_html(html: &str) -> String {
         let sel = scraper::Selector::parse(selector_str).unwrap();
         for element in document.select(&sel) {
             let tag = element.value().name();
+
+            // skip <code> that is a direct child of <pre> — <pre> already handles it
+            if tag == "code" {
+                let parent_is_pre = element.ancestors().any(|a| {
+                    a.value()
+                        .as_element()
+                        .map(|e| e.name() == "pre")
+                        .unwrap_or(false)
+                });
+                if parent_is_pre {
+                    continue;
+                }
+            }
+
             let text = element
                 .text()
                 .collect::<Vec<_>>()
@@ -234,9 +267,10 @@ pub fn extract_text_from_html(html: &str) -> String {
         }
     }
 
-    let limit = 50_000;
-    if output.len() > limit {
-        output.truncate(limit);
+    let limit = 50_000usize;
+    if output.chars().count() > limit {
+        let truncated: String = output.chars().take(limit).collect();
+        output = truncated;
         output.push_str("\n\n[Content truncated due to length limit]");
     }
 
@@ -286,7 +320,7 @@ pub async fn ai_structure_course(
         format!(
             "Failed to parse AI course structure: {}. Raw: {}",
             e,
-            &cleaned[..300.min(cleaned.len())]
+            &cleaned.chars().take(300).collect::<String>()
         )
     })
 }
@@ -318,18 +352,19 @@ pub fn insert_course_to_db(
     ai_course: &AiCourseOutput,
     url: &str,
 ) -> Result<ImportCourseResult, String> {
-    conn.execute("BEGIN", [])
+    let tx = conn
+        .unchecked_transaction()
         .map_err(|e| format!("BEGIN: {}", e))?;
 
     let result = (|| -> Result<ImportCourseResult, String> {
         let slug_base = slugify(&ai_course.course_title);
-        let slug = ensure_unique_slug(conn, &slug_base)?;
+        let slug = ensure_unique_slug(&tx, &slug_base)?;
 
         let metadata = json!({
             "fetched_at": chrono::Utc::now().to_rfc3339(),
         });
 
-        conn.execute(
+        tx.execute(
             "INSERT INTO courses (title, slug, description, source_url, source_type, source_metadata) VALUES (?1, ?2, ?3, ?4, 'url_import', ?5)",
             rusqlite::params![
                 ai_course.course_title,
@@ -341,46 +376,46 @@ pub fn insert_course_to_db(
         )
         .map_err(|e| format!("Insert course: {}", e))?;
 
-        let course_id = conn.last_insert_rowid();
+        let course_id = tx.last_insert_rowid();
 
         let mut chapters_count = 0i64;
         let mut lessons_count = 0i64;
         let mut quiz_count = 0i64;
 
         for (ch_idx, chapter) in ai_course.chapters.iter().enumerate() {
-            conn.execute(
+            tx.execute(
                 "INSERT INTO chapters (course_id, title, order_index) VALUES (?1, ?2, ?3)",
                 rusqlite::params![course_id, chapter.title, ch_idx as i64],
             )
             .map_err(|e| format!("Insert chapter: {}", e))?;
 
-            let chapter_id = conn.last_insert_rowid();
+            let chapter_id = tx.last_insert_rowid();
             chapters_count += 1;
 
             for (l_idx, lesson) in chapter.lessons.iter().enumerate() {
-                conn.execute(
+                tx.execute(
                     "INSERT INTO lessons (chapter_id, title, content_md, order_index) VALUES (?1, ?2, ?3, ?4)",
                     rusqlite::params![chapter_id, lesson.title, lesson.content_md, l_idx as i64],
                 )
                 .map_err(|e| format!("Insert lesson: {}", e))?;
 
-                let lesson_id = conn.last_insert_rowid();
+                let lesson_id = tx.last_insert_rowid();
                 lessons_count += 1;
 
                 if let Some(ref quiz) = lesson.quiz {
-                    conn.execute(
+                    tx.execute(
                         "INSERT INTO quizzes (lesson_id, title) VALUES (?1, ?2)",
                         rusqlite::params![lesson_id, quiz.title],
                     )
                     .map_err(|e| format!("Insert quiz: {}", e))?;
 
-                    let quiz_id = conn.last_insert_rowid();
+                    let quiz_id = tx.last_insert_rowid();
                     quiz_count += 1;
 
                     for q in &quiz.questions {
                         let options_json =
                             serde_json::to_string(&q.options).unwrap_or_else(|_| "[]".to_string());
-                        conn.execute(
+                        tx.execute(
                             "INSERT INTO quiz_questions (quiz_id, question_text, options, correct_answer_index, explanation) VALUES (?1, ?2, ?3, ?4, ?5)",
                             rusqlite::params![
                                 quiz_id,
@@ -408,14 +443,10 @@ pub fn insert_course_to_db(
 
     match result {
         Ok(r) => {
-            conn.execute("COMMIT", [])
-                .map_err(|e| format!("COMMIT: {}", e))?;
+            tx.commit().map_err(|e| format!("COMMIT: {}", e))?;
             Ok(r)
         }
-        Err(e) => {
-            let _ = conn.execute("ROLLBACK", []);
-            Err(e)
-        }
+        Err(e) => Err(e),
     }
 }
 
