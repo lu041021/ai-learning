@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/tauri'
 import { useUserStore } from '../stores'
@@ -39,20 +39,21 @@ export function DocumentPage() {
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    document.title = '我的文档 - AI 学堂'
-    if (userId) loadDocs()
+  const loadDocs = useCallback(() => {
+    if (!userId) return
+    api
+      .listDocuments(userId)
+      .then(setDocs)
+      .catch(() => toast.error('加载文档列表失败'))
   }, [userId])
 
-  async function loadDocs() {
-    if (!userId) return
-    try {
-      const list = await api.listDocuments(userId)
-      setDocs(list)
-    } catch {
-      toast.error('加载文档列表失败')
-    }
-  }
+  useEffect(() => {
+    document.title = '我的文档 - AI 学堂'
+  }, [])
+
+  useEffect(() => {
+    void loadDocs()
+  }, [loadDocs])
 
   async function handleFiles(files: FileList | null) {
     if (!files || !userId) return
@@ -175,7 +176,8 @@ export function DocumentPage() {
                       {doc.filename}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {doc.fileType.toUpperCase()} · {formatBytes(doc.sizeBytes)} · {doc.chunkCount} 个片段
+                      {doc.fileType.toUpperCase()} · {formatBytes(doc.sizeBytes)} · {doc.chunkCount}{' '}
+                      个片段
                     </div>
                   </div>
                   <button
