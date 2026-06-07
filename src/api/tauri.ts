@@ -52,10 +52,12 @@ export const api = {
 
   getQuiz: async (lessonId: number) => {
     const quiz = await invoke<
-      Quiz & {
-        questions: Array<Omit<Quiz['questions'][0], 'options'> & { options: string | string[] }>
-      }
+      | (Quiz & {
+          questions: Array<Omit<Quiz['questions'][0], 'options'> & { options: string | string[] }>
+        })
+      | null
     >('get_quiz', { lessonId })
+    if (!quiz) return null
     return {
       ...quiz,
       questions: quiz.questions.map((q) => ({
