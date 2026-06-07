@@ -27,25 +27,23 @@ const emptyMocks: Record<string, unknown> = {
   get_recommendations: [],
   get_knowledge_graph: { nodes: [], edges: [], positions: [] },
   get_analytics: {
-    summary: {
-      completion_pct: 0,
-      accuracy_pct: 0,
-      streak: { current: 0, longest: 0 },
-      review_rate: 0,
-      quiz_attempts: 0,
-    },
-    per_course: [],
-    weekly_activity: [],
-    accuracy_trend: [],
-    domain_accuracy: [],
-    weak_areas: [],
-    strong_domains: [],
+    completionPct: 0,
+    accuracyPct: 0,
+    streakDays: 0,
+    longestStreak: 0,
+    reviewRate: 0,
+    perCourse: [],
+    weeklyActivity: [],
+    accuracyTrend: [],
+    domainAccuracy: [],
+    weakAreas: [],
+    strongAreas: [],
   },
   get_learning_path: null,
   list_learning_path_versions: [],
   list_conversations: [],
   get_messages: [],
-  get_dashboard_data: { skill_radar: [], course_progress: [], knowledge_tree: [] },
+  get_dashboard_data: { total_lessons: 0, completed_lessons: 0, total_quizzes: 0, avg_quiz_score: 0, skill_radar: [], course_progress: [], calendar_days: [], knowledge_tree: [] },
   search_all: [],
   list_feed_subscriptions: [],
   get_user_by_local: { id: 1, username: 'test-user', local_id: 'local-1' },
@@ -197,14 +195,19 @@ const populatedMocks: Record<string, unknown> = {
   },
   get_progress: { completed_lesson_ids: [1001], quiz_scores: { 1: 67 } },
   get_dashboard_data: {
+    total_lessons: 3,
+    completed_lessons: 1,
+    total_quizzes: 1,
+    avg_quiz_score: 67,
     skill_radar: [
-      { domain: 'ML Basics', score: 70 },
-      { domain: 'Deep Learning', score: 30 },
-      { domain: 'NLP', score: 10 },
+      { label: 'ML Basics', score: 70 },
+      { label: 'Deep Learning', score: 30 },
+      { label: 'NLP', score: 10 },
     ],
     course_progress: [
-      { course_id: 1, course_title: 'ML Basics', completed_lessons: 1, total_lessons: 3, pct: 33 },
+      { course_id: 1, title: 'ML Basics', slug: 'ml-basics', total_lessons: 3, completed_lessons: 1 },
     ],
+    calendar_days: [],
     knowledge_tree: [],
   },
   search_all: [
@@ -304,31 +307,24 @@ const populatedMocks: Record<string, unknown> = {
     summary: 'Beginner in AI',
   },
   get_analytics: {
-    summary: {
-      completion_pct: 33,
-      accuracy_pct: 67,
-      streak: { current: 3, longest: 5 },
-      review_rate: 0.5,
-      quiz_attempts: 3,
-    },
-    per_course: [
-      {
-        course_id: 1,
-        course_title: 'ML Basics',
-        completed_lessons: 1,
-        total_lessons: 3,
-        accuracy_pct: 67,
-      },
+    completionPct: 33,
+    accuracyPct: 67,
+    streakDays: 3,
+    longestStreak: 5,
+    reviewRate: 0.5,
+    perCourse: [
+      { courseId: 1, title: 'ML Basics', slug: 'ml-basics', totalLessons: 3, completed: 1, avgQuizScore: 67, quizAttempts: 1 },
     ],
-    weekly_activity: [{ week: '2025-W01', lessons_completed: 2, quizzes_taken: 1 }],
-    accuracy_trend: [
-      { quiz_id: 1, score_pct: 50 },
-      { quiz_id: 1, score_pct: 67 },
-      { quiz_id: 2, score_pct: 80 },
+    weeklyActivity: [{ week: '2025-W01', sessions: 2, lessonsCompleted: 1 }],
+    accuracyTrend: [
+      { label: 'Quiz 1', score: 50 },
+      { label: 'Quiz 2', score: 67 },
     ],
-    domain_accuracy: [{ domain: 'ML Basics', accuracy_pct: 67 }],
-    weak_areas: [{ domain: 'ML Basics', topic: 'Supervised Learning', accuracy_pct: 33 }],
-    strong_domains: [{ domain: 'ML Basics', accuracy_pct: 80 }],
+    domainAccuracy: [{ domain: 'ML Basics', accuracy: 67, attempts: 1 }],
+    weakAreas: [
+      { conceptName: 'Supervised Learning', accuracy: 33, lessonTitle: 'Types of ML', courseSlug: 'ml-basics', lessonId: 1002 },
+    ],
+    strongAreas: ['ML Basics'],
   },
   get_knowledge_graph: {
     nodes: [
@@ -362,6 +358,8 @@ export async function setupMock(page: Page, overrides?: Record<string, unknown>)
   await page.addInitScript(
     (initArg: string) => {
       const { mocks } = JSON.parse(initArg)
+      localStorage.setItem('ai_learning_user_id', '1')
+      localStorage.setItem('ai_learning_user', 'test-local-id')
       const invokeImpl = async (cmd: string) => {
         const result = mocks[cmd]
         if (
@@ -389,6 +387,8 @@ export async function scenarioMock(page: Page, scenario: ScenarioName) {
   const mocks = scenarioMocks[scenario]
   await page.addInitScript((initArg: string) => {
     const { mocks: mockMap } = JSON.parse(initArg)
+    localStorage.setItem('ai_learning_user_id', '1')
+    localStorage.setItem('ai_learning_user', 'test-local-id')
     const invokeImpl = async (cmd: string) => {
       const result = mockMap[cmd]
       if (
