@@ -9,7 +9,7 @@ import { ErrorBlock } from '../components/common/ErrorBlock'
 import type { CourseSummary, RecommendationItem } from '../types'
 
 const COURSE_ITEM_HEIGHT = 138
-const VIRTUAL_THRESHOLD = 50
+const VIRTUAL_THRESHOLD = 20
 const VIRTUAL_CONTAINER_HEIGHT = 600
 
 export function HomePage() {

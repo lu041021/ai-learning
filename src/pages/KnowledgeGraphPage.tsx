@@ -4,7 +4,6 @@ import { api } from '../api/tauri'
 import { ForceGraph } from '../components/common/ForceGraph'
 import { useMountedRef } from '../hooks/useMountedRef'
 import type { KnowledgeGraphData, ConceptNode } from '../types'
-import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { ErrorBlock } from '../components/common/ErrorBlock'
 
 export function KnowledgeGraphPage() {
@@ -57,7 +56,39 @@ export function KnowledgeGraphPage() {
     : null
 
   if (loading) {
-    return <LoadingSpinner />
+    return (
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <div
+            style={{
+              width: '120px',
+              height: '28px',
+              borderRadius: 'var(--radius)',
+              background: 'var(--bg-tertiary)',
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}
+          />
+          <div
+            style={{
+              width: '240px',
+              height: '16px',
+              borderRadius: 'var(--radius)',
+              background: 'var(--bg-tertiary)',
+              marginTop: '8px',
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}
+          />
+        </div>
+        <div
+          style={{
+            height: '560px',
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--bg-tertiary)',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }}
+        />
+      </div>
+    )
   }
 
   if (error) {
