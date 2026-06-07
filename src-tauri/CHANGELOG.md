@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/lu041021/ai-learning/compare/ai-learning-platform-v0.2.0...ai-learning-platform-v0.3.0) (2026-06-07)
+
+
+### Features
+
+* **db:** add v2 migration — courses/lessons metadata fields ([473b8bc](https://github.com/lu041021/ai-learning/commit/473b8bcf00cbf16e3e7bda1acc8406c5cfad19bf))
+* **db:** enable WAL mode with busy_timeout=5000ms ([64b2282](https://github.com/lu041021/ai-learning/commit/64b2282665b72a3203ad4acde8741d6044aef2b1))
+* **llm:** add OpenAI and Ollama provider support ([e1b86d2](https://github.com/lu041021/ai-learning/commit/e1b86d2ba86ceab7de55b6e14fec764aaeec9961))
+* **monitoring:** log frontend JS errors to local file via ErrorBoundary ([33e3f32](https://github.com/lu041021/ai-learning/commit/33e3f32180db9d05b340624539e7c7cf78838909))
+* **rag:** add document upload and retrieval-augmented generation ([a31a108](https://github.com/lu041021/ai-learning/commit/a31a108299f8cf01d3936dcd08d595f809d84fe4))
+
+
+### Performance Improvements
+
+* **db:** add v4 migration with 4 missing query indexes ([7d82f7b](https://github.com/lu041021/ai-learning/commit/7d82f7b18dac434f2cfe2a973d5252b6f7869aa0))
+
 ## [0.2.0](https://github.com/lu041021/ai-learning/compare/ai-learning-platform-v0.1.0...ai-learning-platform-v0.2.0) (2026-06-06)
 
 
