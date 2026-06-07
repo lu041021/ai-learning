@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::error::AppError;
 use std::collections::HashMap;
 use tauri::State;
 
@@ -7,28 +8,22 @@ use crate::models::progress::{ProgressOut, QuizResult, WrongAnswerItem};
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
 #[tauri::command]
-pub fn get_progress(user_id: i64, db: State<'_, DbPool>) -> Result<ProgressOut, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+pub fn get_progress(user_id: i64, db: State<'_, DbPool>) -> Result<ProgressOut, AppError> {
+    let conn = db.get()?;
 
-    let mut p_stmt = conn
-        .prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")
-        .map_err(|e| e.to_string())?;
+    let mut p_stmt =
+        conn.prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")?;
     let completed_lesson_ids: Vec<i64> = p_stmt
-        .query_map(rusqlite::params![user_id], |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .query_map(rusqlite::params![user_id], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut q_stmt = conn
-        .prepare(
-            "SELECT quiz_id, score FROM quiz_attempts WHERE user_id = ?1 ORDER BY created_at DESC",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut q_stmt = conn.prepare(
+        "SELECT quiz_id, score FROM quiz_attempts WHERE user_id = ?1 ORDER BY created_at DESC",
+    )?;
     let quiz_scores: HashMap<i64, f64> = q_stmt
         .query_map(rusqlite::params![user_id], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?))
-        })
-        .map_err(|e| e.to_string())?
+        })?
         .filter_map(|r| r.ok())
         .fold(HashMap::new(), |mut acc, (qid, score)| {
             acc.entry(qid).or_insert(score);
@@ -46,8 +41,8 @@ pub fn mark_complete(
     user_id: i64,
     lesson_id: i64,
     db: State<'_, DbPool>,
-) -> Result<String, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<String, AppError> {
+    let conn = db.get()?;
 
     conn.execute(
         "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at)
@@ -56,8 +51,7 @@ pub fn mark_complete(
              completed = 1,
              completed_at = datetime('now')",
         rusqlite::params![user_id, lesson_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     crate::services::memory_bridge::update_learning_memory(&conn, user_id);
 
@@ -71,9 +65,9 @@ pub async fn submit_quiz(
     answers: Vec<i64>,
     db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
-) -> Result<QuizResult, String> {
+) -> Result<QuizResult, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -81,11 +75,12 @@ pub async fn submit_quiz(
         )
     };
     let questions_data: Vec<crate::services::quiz_grader::QuizQuestionData> = {
-        let conn = db.get().map_err(|e| e.to_string())?;
-        let mut stmt = conn
-            .prepare("SELECT question_text, options, correct_answer_index, explanation FROM quiz_questions WHERE quiz_id = ?1")
-            .map_err(|e| e.to_string())?;
-        let result: Vec<crate::services::quiz_grader::QuizQuestionData> = stmt
+        let conn = db.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT question_text, options, correct_answer_index, explanation \
+             FROM quiz_questions WHERE quiz_id = ?1",
+        )?;
+        let result = stmt
             .query_map(rusqlite::params![quiz_id], |row| {
                 Ok(crate::services::quiz_grader::QuizQuestionData {
                     question_text: row.get(0)?,
@@ -93,10 +88,8 @@ pub async fn submit_quiz(
                     correct_answer_index: row.get(2)?,
                     explanation: row.get::<_, String>(3).unwrap_or_default(),
                 })
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
         result
     };
 
@@ -108,9 +101,10 @@ pub async fn submit_quiz(
     let correct = (score * total as f64).round() as i64;
 
     {
-        let conn = db.get().map_err(|e| e.to_string())?;
+        let conn = db.get()?;
         conn.execute(
-            "INSERT INTO quiz_attempts (user_id, quiz_id, score, answers, feedback, next_step_recommendation) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO quiz_attempts (user_id, quiz_id, score, answers, feedback, next_step_recommendation) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![
                 user_id,
                 quiz_id,
@@ -119,8 +113,7 @@ pub async fn submit_quiz(
                 feedback,
                 next_step_recommendation,
             ],
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
         if score >= 0.7 {
             let lesson_id: Option<i64> = conn
@@ -155,38 +148,33 @@ pub async fn submit_quiz(
 }
 
 #[tauri::command]
-pub fn clear_user_data(user_id: i64, db: State<'_, DbPool>) -> Result<(), String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+pub fn clear_user_data(user_id: i64, db: State<'_, DbPool>) -> Result<(), AppError> {
+    let conn = db.get()?;
     conn.execute(
-        "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?1)",
+        "DELETE FROM messages WHERE conversation_id IN \
+         (SELECT id FROM conversations WHERE user_id = ?1)",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     conn.execute(
         "DELETE FROM conversations WHERE user_id = ?1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     conn.execute(
         "DELETE FROM quiz_attempts WHERE user_id = ?1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     conn.execute(
         "DELETE FROM user_progress WHERE user_id = ?1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     conn.execute(
         "DELETE FROM learning_path_history WHERE user_id = ?1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     conn.execute(
         "DELETE FROM user_profiles WHERE user_id = ?1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
@@ -194,24 +182,22 @@ pub fn clear_user_data(user_id: i64, db: State<'_, DbPool>) -> Result<(), String
 pub fn get_wrong_answers(
     user_id: i64,
     db: State<'_, DbPool>,
-) -> Result<Vec<WrongAnswerItem>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<Vec<WrongAnswerItem>, AppError> {
+    let conn = db.get()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT qa.quiz_id, qa.answers, qa.created_at,
-                    qz.title as quiz_title,
-                    l.id as lesson_id, l.title as lesson_title,
-                    c.slug as course_slug
-             FROM quiz_attempts qa
-             JOIN quizzes qz ON qz.id = qa.quiz_id
-             JOIN lessons l ON l.id = qz.lesson_id
-             JOIN chapters ch ON ch.id = l.chapter_id
-             JOIN courses c ON c.id = ch.course_id
-             WHERE qa.user_id = ?1
-             ORDER BY qa.created_at DESC",
-        )
-        .map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT qa.quiz_id, qa.answers, qa.created_at,
+                qz.title as quiz_title,
+                l.id as lesson_id, l.title as lesson_title,
+                c.slug as course_slug
+         FROM quiz_attempts qa
+         JOIN quizzes qz ON qz.id = qa.quiz_id
+         JOIN lessons l ON l.id = qz.lesson_id
+         JOIN chapters ch ON ch.id = l.chapter_id
+         JOIN courses c ON c.id = ch.course_id
+         WHERE qa.user_id = ?1
+         ORDER BY qa.created_at DESC",
+    )?;
 
     let attempts: Vec<(i64, String, String, String, i64, String, String)> = stmt
         .query_map(rusqlite::params![user_id], |row| {
@@ -224,16 +210,13 @@ pub fn get_wrong_answers(
                 row.get(5)?,
                 row.get(6)?,
             ))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     if attempts.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Batch-load all quiz questions in one query
     let mut quiz_ids: Vec<i64> = attempts.iter().map(|(qid, ..)| *qid).collect();
     quiz_ids.sort_unstable();
     quiz_ids.dedup();
@@ -243,13 +226,13 @@ pub fn get_wrong_answers(
         .collect::<Vec<_>>()
         .join(",");
     let q_sql = format!(
-        "SELECT quiz_id, question_text, options, correct_answer_index, explanation
+        "SELECT quiz_id, question_text, options, correct_answer_index, explanation \
          FROM quiz_questions WHERE quiz_id IN ({}) ORDER BY quiz_id, id",
         placeholders
     );
     let mut questions_by_quiz: HashMap<i64, Vec<(String, String, i64, String)>> = HashMap::new();
     {
-        let mut q_stmt = conn.prepare(&q_sql).map_err(|e| e.to_string())?;
+        let mut q_stmt = conn.prepare(&q_sql)?;
         q_stmt
             .query_map([], |row| {
                 Ok((
@@ -259,10 +242,8 @@ pub fn get_wrong_answers(
                     row.get::<_, i64>(3)?,
                     row.get::<_, String>(4).unwrap_or_default(),
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?
+            })?
+            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .for_each(|(qid, qtext, opts, cidx, expl)| {
                 questions_by_quiz

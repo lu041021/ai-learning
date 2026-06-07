@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::error::AppError;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,46 +19,42 @@ pub fn list_conversations(
     db: State<'_, DbPool>,
     limit: Option<i64>,
     offset: Option<i64>,
-) -> Result<Vec<ConversationOut>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<Vec<ConversationOut>, AppError> {
+    let conn = db.get()?;
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
-    let mut stmt = conn
-        .prepare("SELECT id, title, lesson_id, created_at, updated_at FROM conversations WHERE user_id = ?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(rusqlite::params![user_id, limit, offset], |row| {
-            Ok(ConversationOut {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                lesson_id: row.get(2)?,
-                created_at: row.get::<_, String>(3).unwrap_or_default(),
-                updated_at: row.get::<_, String>(4).unwrap_or_default(),
-            })
+    let mut stmt = conn.prepare(
+        "SELECT id, title, lesson_id, created_at, updated_at FROM conversations \
+         WHERE user_id = ?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![user_id, limit, offset], |row| {
+        Ok(ConversationOut {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            lesson_id: row.get(2)?,
+            created_at: row.get::<_, String>(3).unwrap_or_default(),
+            updated_at: row.get::<_, String>(4).unwrap_or_default(),
         })
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 #[tauri::command]
-pub fn get_messages(conv_id: i64, db: State<'_, DbPool>) -> Result<Vec<MessageOut>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare("SELECT id, role, content, created_at FROM messages WHERE conversation_id = ?1 ORDER BY created_at")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(rusqlite::params![conv_id], |row| {
-            Ok(MessageOut {
-                id: row.get(0)?,
-                role: row.get(1)?,
-                content: row.get(2)?,
-                created_at: row.get::<_, String>(3).unwrap_or_default(),
-            })
+pub fn get_messages(conv_id: i64, db: State<'_, DbPool>) -> Result<Vec<MessageOut>, AppError> {
+    let conn = db.get()?;
+    let mut stmt = conn.prepare(
+        "SELECT id, role, content, created_at FROM messages \
+         WHERE conversation_id = ?1 ORDER BY created_at",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![conv_id], |row| {
+        Ok(MessageOut {
+            id: row.get(0)?,
+            role: row.get(1)?,
+            content: row.get(2)?,
+            created_at: row.get::<_, String>(3).unwrap_or_default(),
         })
-        .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -71,9 +68,9 @@ pub async fn send_chat(
     selected_text: Option<String>,
     conversation_id: Option<i64>,
     max_chat_history: Option<i64>,
-) -> Result<i64, String> {
+) -> Result<i64, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -84,7 +81,7 @@ pub async fn send_chat(
 
     let prepared = {
         let db = app_handle.state::<DbPool>();
-        let conn = db.get().map_err(|e| e.to_string())?;
+        let conn = db.get()?;
         prepare_conversation(
             &conn,
             user_id,
@@ -93,7 +90,8 @@ pub async fn send_chat(
             selected_text.as_deref(),
             conversation_id,
             max_history,
-        )?
+        )
+        .map_err(AppError::from)?
     };
 
     let conv_id = prepared.conv_id;
@@ -101,7 +99,7 @@ pub async fn send_chat(
     let cancel_flag = Arc::new(AtomicBool::new(false));
     {
         let cancellers = app_handle.state::<StreamCancellers>();
-        let mut map = cancellers.0.lock().map_err(|e| e.to_string())?;
+        let mut map = cancellers.0.lock()?;
         map.insert(conv_id, cancel_flag.clone());
     }
 
@@ -150,8 +148,8 @@ pub async fn send_chat(
 }
 
 #[tauri::command]
-pub fn cancel_chat(conv_id: i64, cancellers: State<'_, StreamCancellers>) -> Result<(), String> {
-    let map = cancellers.0.lock().map_err(|e| e.to_string())?;
+pub fn cancel_chat(conv_id: i64, cancellers: State<'_, StreamCancellers>) -> Result<(), AppError> {
+    let map = cancellers.0.lock()?;
     if let Some(cancel) = map.get(&conv_id) {
         cancel.store(true, Ordering::SeqCst);
     }

@@ -1,13 +1,16 @@
 use crate::commands::config_cmd::ConfigState;
 use crate::db::DbPool;
+use crate::error::AppError;
 use crate::models::learning_path::{LearningPathOut, LearningPathStep};
 use crate::models::usage_profile::UsageProfile;
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
 #[tauri::command]
-pub async fn analyze_usage(config: tauri::State<'_, ConfigState>) -> Result<UsageProfile, String> {
+pub async fn analyze_usage(
+    config: tauri::State<'_, ConfigState>,
+) -> Result<UsageProfile, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -15,10 +18,14 @@ pub async fn analyze_usage(config: tauri::State<'_, ConfigState>) -> Result<Usag
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
     let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
-    crate::services::usage_analyzer::analyze_usage(&client).await
+    crate::services::usage_analyzer::analyze_usage(&client)
+        .await
+        .map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -26,9 +33,9 @@ pub async fn generate_goal_path(
     user_id: i64,
     db: tauri::State<'_, DbPool>,
     config: tauri::State<'_, ConfigState>,
-) -> Result<LearningPathOut, String> {
+) -> Result<LearningPathOut, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -36,7 +43,9 @@ pub async fn generate_goal_path(
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
 
     let usage_context = {
@@ -99,7 +108,7 @@ pub async fn generate_goal_path(
         quiz_avg,
         course_outline,
     ) = {
-        let conn = db.get().map_err(|e| e.to_string())?;
+        let conn = db.get()?;
 
         let (el, interests_str, lg) = conn
             .query_row(
@@ -107,7 +116,7 @@ pub async fn generate_goal_path(
                 rusqlite::params![user_id],
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
             )
-            .map_err(|_| "请先完成入门评估".to_string())?;
+            .map_err(|_| AppError::InvalidInput("请先完成入门评估".to_string()))?;
 
         let interests: Vec<String> = serde_json::from_str(&interests_str).unwrap_or_default();
 
@@ -126,7 +135,8 @@ pub async fn generate_goal_path(
         let quiz_avg = crate::services::ai_tutor::query_quiz_avg(&conn, user_id)
             .unwrap_or_else(|_| "N/A".to_string());
 
-        let outline = crate::commands::skill_assessment::build_course_outline(&conn)?;
+        let outline = crate::commands::skill_assessment::build_course_outline(&conn)
+            .map_err(AppError::from)?;
 
         (
             el,
@@ -156,7 +166,7 @@ pub async fn generate_goal_path(
         &client,
     )
     .await
-    .map_err(|e| format!("AI 生成路线失败: {e}"))?;
+    .map_err(|e| AppError::LlmError(format!("AI 生成路线失败: {e}")))?;
 
     let steps_json = serde_json::to_string(&steps).unwrap_or_default();
     let context_snapshot = serde_json::to_string(&serde_json::json!({
@@ -169,13 +179,12 @@ pub async fn generate_goal_path(
         "usage_context": usage_context,
     }))
     .unwrap_or_default();
-    let conn = db.get().map_err(|e| e.to_string())?;
+    let conn = db.get()?;
 
     conn.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let next_version: i64 = conn
         .query_row(
@@ -188,8 +197,7 @@ pub async fn generate_goal_path(
     conn.execute(
         "INSERT INTO learning_path_history (user_id, steps_json, version, is_active, context_snapshot) VALUES (?1, ?2, ?3, 1, ?4)",
         rusqlite::params![user_id, steps_json, next_version, context_snapshot],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let path_id = conn.last_insert_rowid();
 

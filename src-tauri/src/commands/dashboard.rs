@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::error::AppError;
 use rusqlite::Connection;
 use tauri::State;
 
@@ -7,35 +8,25 @@ use crate::models::dashboard::{
 };
 
 #[tauri::command]
-pub fn get_dashboard_data(user_id: i64, db: State<'_, DbPool>) -> Result<DashboardData, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+pub fn get_dashboard_data(user_id: i64, db: State<'_, DbPool>) -> Result<DashboardData, AppError> {
+    let conn = db.get()?;
 
     let (total_lessons, completed_lessons) = {
-        let mut stmt = conn
-            .prepare("SELECT COUNT(*) FROM lessons")
-            .map_err(|e| e.to_string())?;
-        let total: i64 = stmt
-            .query_row([], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM lessons")?;
+        let total: i64 = stmt.query_row([], |row| row.get(0))?;
 
         let mut stmt = conn
-            .prepare("SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1")
-            .map_err(|e| e.to_string())?;
-        let completed: i64 = stmt
-            .query_row(rusqlite::params![user_id], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+            .prepare("SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1")?;
+        let completed: i64 = stmt.query_row(rusqlite::params![user_id], |row| row.get(0))?;
         (total, completed)
     };
 
     let (total_quizzes, avg_quiz_score) = {
-        let mut stmt = conn
-            .prepare("SELECT COUNT(*), AVG(score) FROM quiz_attempts WHERE user_id = ?1")
-            .map_err(|e| e.to_string())?;
-        let result: (i64, Option<f64>) = stmt
-            .query_row(rusqlite::params![user_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(|e| e.to_string())?;
+        let mut stmt =
+            conn.prepare("SELECT COUNT(*), AVG(score) FROM quiz_attempts WHERE user_id = ?1")?;
+        let result: (i64, Option<f64>) = stmt.query_row(rusqlite::params![user_id], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
         (result.0, result.1.unwrap_or(0.0))
     };
 

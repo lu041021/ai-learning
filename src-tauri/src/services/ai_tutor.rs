@@ -424,7 +424,7 @@ fn query_doc_context(conn: &Connection, user_id: i64, query: &str) -> Result<Str
          WHERE doc_chunks MATCH ?1
            AND user_id = ?2
          ORDER BY rank LIMIT 3";
-    let mut stmt = match conn.prepare(&sql) {
+    let mut stmt = match conn.prepare(sql) {
         Ok(s) => s,
         Err(_) => return Ok(String::new()),
     };

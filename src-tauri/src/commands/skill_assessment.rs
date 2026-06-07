@@ -1,4 +1,5 @@
 use crate::db::DbPool;
+use crate::error::AppError;
 use rusqlite::Connection;
 use serde_json::json;
 use tauri::State;
@@ -16,9 +17,9 @@ pub async fn assess_user_skill(
     input: AssessUserSkillInput,
     db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
-) -> Result<UserProfileOut, String> {
+) -> Result<UserProfileOut, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -26,14 +27,18 @@ pub async fn assess_user_skill(
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
 
     let client = LlmClient::new(LlmProvider::from_name(&api_provider), api_key, model);
     let assessment: SkillAssessment =
-        crate::services::skill_assessor::assess_skill(&input.responses, &client).await?;
+        crate::services::skill_assessor::assess_skill(&input.responses, &client)
+            .await
+            .map_err(AppError::from)?;
 
-    let conn = db.get().map_err(|e| e.to_string())?;
+    let conn = db.get()?;
 
     let interests_json = serde_json::to_string(&assessment.interests).unwrap_or_default();
     let responses_json = serde_json::to_string(&input.responses).unwrap_or_default();
@@ -57,7 +62,7 @@ pub async fn assess_user_skill(
                 assessment.summary,
                 pid,
             ],
-        ).map_err(|e| e.to_string())?;
+        )?;
         pid
     } else {
         conn.execute(
@@ -70,7 +75,7 @@ pub async fn assess_user_skill(
                 responses_json,
                 assessment.summary,
             ],
-        ).map_err(|e| e.to_string())?;
+        )?;
         conn.last_insert_rowid()
     };
 
@@ -89,8 +94,8 @@ pub async fn assess_user_skill(
 pub fn get_user_profile(
     user_id: i64,
     db: State<'_, DbPool>,
-) -> Result<Option<UserProfileOut>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<Option<UserProfileOut>, AppError> {
+    let conn = db.get()?;
     let result = conn.query_row(
         "SELECT id, user_id, experience_level, interests, learning_goals, assessment_completed, summary FROM user_profiles WHERE user_id = ?1",
         rusqlite::params![user_id],
@@ -111,7 +116,7 @@ pub fn get_user_profile(
     match result {
         Ok(profile) => Ok(Some(profile)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(AppError::Sqlite(e)),
     }
 }
 
@@ -120,9 +125,9 @@ pub async fn generate_learning_path(
     user_id: i64,
     db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
-) -> Result<LearningPathOut, String> {
+) -> Result<LearningPathOut, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -130,7 +135,9 @@ pub async fn generate_learning_path(
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
 
     let (
@@ -142,7 +149,7 @@ pub async fn generate_learning_path(
         quiz_avg,
         course_outline,
     ) = {
-        let conn = db.get().map_err(|e| e.to_string())?;
+        let conn = db.get()?;
 
         let (el, interests_str, lg) = conn
             .query_row(
@@ -156,7 +163,7 @@ pub async fn generate_learning_path(
                     ))
                 },
             )
-            .map_err(|_| "请先完成入门评估".to_string())?;
+            .map_err(|_| AppError::InvalidInput("请先完成入门评估".to_string()))?;
 
         let interests: Vec<String> = serde_json::from_str(&interests_str).unwrap_or_default();
 
@@ -175,7 +182,7 @@ pub async fn generate_learning_path(
         let quiz_avg = crate::services::ai_tutor::query_quiz_avg(&conn, user_id)
             .unwrap_or_else(|_| "N/A".to_string());
 
-        let outline = build_course_outline(&conn)?;
+        let outline = build_course_outline(&conn).map_err(AppError::from)?;
 
         (
             el,
@@ -207,7 +214,7 @@ pub async fn generate_learning_path(
     .await
     .map_err(|e| {
         eprintln!("[generate_path] LLM error: {e}");
-        format!("AI 生成路线失败: {e}")
+        AppError::LlmError(format!("AI 生成路线失败: {e}"))
     })?;
 
     let steps_json = serde_json::to_string(&steps).unwrap_or_default();
@@ -220,14 +227,13 @@ pub async fn generate_learning_path(
         "quiz_avg": quiz_avg,
     }))
     .unwrap_or_default();
-    let mut conn = db.get().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut conn = db.get()?;
+    let tx = conn.transaction()?;
 
     tx.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let next_version: i64 = tx
         .query_row(
@@ -240,11 +246,10 @@ pub async fn generate_learning_path(
     tx.execute(
         "INSERT INTO learning_path_history (user_id, steps_json, version, is_active, context_snapshot) VALUES (?1, ?2, ?3, 1, ?4)",
         rusqlite::params![user_id, steps_json, next_version, context_snapshot],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let path_id = tx.last_insert_rowid();
-    tx.commit().map_err(|e| e.to_string())?;
+    tx.commit()?;
 
     Ok(LearningPathOut {
         id: path_id,
@@ -259,8 +264,8 @@ pub async fn generate_learning_path(
 pub fn get_learning_path(
     user_id: i64,
     db: State<'_, DbPool>,
-) -> Result<Option<LearningPathOut>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<Option<LearningPathOut>, AppError> {
+    let conn = db.get()?;
     let result = conn.query_row(
         "SELECT id, steps_json, generated_at, updated_at FROM learning_path_history WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
@@ -303,7 +308,7 @@ pub fn get_learning_path(
             Ok(Some(path))
         }
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(AppError::Sqlite(e)),
     }
 }
 
@@ -320,11 +325,12 @@ pub struct LearningPathVersionSummary {
 pub fn list_learning_path_versions(
     user_id: i64,
     db: State<'_, DbPool>,
-) -> Result<Vec<LearningPathVersionSummary>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare("SELECT id, version, is_active, generated_at, steps_json FROM learning_path_history WHERE user_id = ?1 ORDER BY version DESC")
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<LearningPathVersionSummary>, AppError> {
+    let conn = db.get()?;
+    let mut stmt = conn.prepare(
+        "SELECT id, version, is_active, generated_at, steps_json \
+         FROM learning_path_history WHERE user_id = ?1 ORDER BY version DESC",
+    )?;
     let versions = stmt
         .query_map(rusqlite::params![user_id], |row| {
             let steps_str: String = row.get(4)?;
@@ -337,10 +343,8 @@ pub fn list_learning_path_versions(
                 generated_at: row.get(3)?,
                 step_count: steps.len(),
             })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(versions)
 }
 
@@ -349,8 +353,8 @@ pub fn get_learning_path_version(
     user_id: i64,
     version_id: i64,
     db: State<'_, DbPool>,
-) -> Result<Option<LearningPathOut>, String> {
-    let conn = db.get().map_err(|e| e.to_string())?;
+) -> Result<Option<LearningPathOut>, AppError> {
+    let conn = db.get()?;
     let result = conn.query_row(
         "SELECT id, steps_json, generated_at, updated_at FROM learning_path_history WHERE id = ?1 AND user_id = ?2",
         rusqlite::params![version_id, user_id],
@@ -369,7 +373,7 @@ pub fn get_learning_path_version(
     match result {
         Ok(path) => Ok(Some(path)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(AppError::Sqlite(e)),
     }
 }
 
@@ -448,9 +452,9 @@ pub async fn assess_user_skill_deep(
     input: AssessUserSkillInput,
     db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
-) -> Result<UserProfileFull, String> {
+) -> Result<UserProfileFull, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -458,7 +462,9 @@ pub async fn assess_user_skill_deep(
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
 
     let (
@@ -477,8 +483,8 @@ pub async fn assess_user_skill_deep(
         wrong_concepts,
         domain_accuracy,
     ) = {
-        let conn = db.get().map_err(|e| e.to_string())?;
-        gather_profile_data(&conn, input.user_id, &input.responses)?
+        let conn = db.get()?;
+        gather_profile_data(&conn, input.user_id, &input.responses).map_err(AppError::from)?
     };
 
     let data = ProfileBuildData {
@@ -508,7 +514,8 @@ pub async fn assess_user_skill_deep(
             &prompt,
             4096,
         )
-        .await?;
+        .await
+        .map_err(AppError::from)?;
 
     let cleaned = crate::services::skill_assessor::clean_json_response(&response_text);
     let mut profile = crate::services::profile_builder::profile_from_llm_json(
@@ -522,13 +529,14 @@ pub async fn assess_user_skill_deep(
             completion_pct,
             external_skill_context: None,
         },
-    )?;
+    )
+    .map_err(AppError::from)?;
     profile.generated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let profile_json = serde_json::to_string(&profile).unwrap_or_default();
     let interests_json =
         serde_json::to_string(&profile.interests).unwrap_or_else(|_| "[]".to_string());
-    let conn = db.get().map_err(|e| e.to_string())?;
+    let conn = db.get()?;
 
     conn.execute(
         "INSERT INTO user_profiles (user_id, experience_level, interests, learning_goals, assessment_completed, profile_data, updated_at)
@@ -547,8 +555,7 @@ pub async fn assess_user_skill_deep(
             profile.learning_goals,
             profile_json,
         ],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     Ok(profile)
 }
@@ -558,9 +565,9 @@ pub async fn generate_enriched_learning_path(
     user_id: i64,
     db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
-) -> Result<LearningPathOut, String> {
+) -> Result<LearningPathOut, AppError> {
     let (api_key, model, api_provider) = {
-        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        let cfg = config.config.lock()?;
         (
             cfg.api_key.clone(),
             cfg.model.clone(),
@@ -568,11 +575,13 @@ pub async fn generate_enriched_learning_path(
         )
     };
     if api_key.is_empty() {
-        return Err("请先在设置中配置 API Key".to_string());
+        return Err(AppError::InvalidInput(
+            "请先在设置中配置 API Key".to_string(),
+        ));
     }
 
     let (profile, course_outline) = {
-        let conn = db.get().map_err(|e| e.to_string())?;
+        let conn = db.get()?;
 
         let profile_json: String = conn
             .query_row(
@@ -580,16 +589,18 @@ pub async fn generate_enriched_learning_path(
                 rusqlite::params![user_id],
                 |row| row.get(0),
             )
-            .map_err(|_| "请先完成深度评估".to_string())?;
+            .map_err(|_| AppError::InvalidInput("请先完成深度评估".to_string()))?;
 
         if profile_json.is_empty() {
-            return Err("请先完成深度评估再生成路线".to_string());
+            return Err(AppError::InvalidInput(
+                "请先完成深度评估再生成路线".to_string(),
+            ));
         }
 
         let profile: UserProfileFull =
-            serde_json::from_str(&profile_json).map_err(|e| format!("读取画像数据失败: {}", e))?;
+            serde_json::from_str(&profile_json).map_err(AppError::from)?;
 
-        let outline = build_course_outline(&conn)?;
+        let outline = build_course_outline(&conn).map_err(AppError::from)?;
         (profile, outline)
     };
 
@@ -604,18 +615,17 @@ pub async fn generate_enriched_learning_path(
         &client,
     )
     .await
-    .map_err(|e| format!("AI 生成路线失败: {e}"))?;
+    .map_err(|e| AppError::LlmError(format!("AI 生成路线失败: {e}")))?;
 
     let steps_json = serde_json::to_string(&steps).unwrap_or_default();
     let context_snapshot = serde_json::to_string(&profile).unwrap_or_default();
-    let mut conn = db.get().map_err(|e| e.to_string())?;
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let mut conn = db.get()?;
+    let tx = conn.transaction()?;
 
     tx.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let next_version: i64 = tx
         .query_row(
@@ -628,11 +638,10 @@ pub async fn generate_enriched_learning_path(
     tx.execute(
         "INSERT INTO learning_path_history (user_id, steps_json, version, is_active, context_snapshot) VALUES (?1, ?2, ?3, 1, ?4)",
         rusqlite::params![user_id, steps_json, next_version, context_snapshot],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
 
     let path_id = tx.last_insert_rowid();
-    tx.commit().map_err(|e| e.to_string())?;
+    tx.commit()?;
 
     Ok(LearningPathOut {
         id: path_id,
