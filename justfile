@@ -22,13 +22,13 @@ preview:
 
 # 全面检查 (Rust + TypeScript + Lint)
 check:
-    cargo check
+    cd src-tauri && cargo check
     npx tsc --noEmit
     npm run lint
 
 # 仅 Rust 类型检查
 check-rust:
-    cargo check
+    cd src-tauri && cargo check
 
 # 仅 TypeScript 类型检查
 check-ts:
