@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 2;
+const CURRENT_VERSION: i64 = 3;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     let version = get_schema_version(conn)?;
@@ -10,6 +10,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     }
     if version < 2 {
         migrate_v1_to_v2(conn)?;
+    }
+    if version < 3 {
+        migrate_v2_to_v3(conn)?;
     }
 
     set_schema_version(conn, CURRENT_VERSION)?;
@@ -416,6 +419,38 @@ fn seed_concepts(conn: &Connection) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn migrate_v2_to_v3(conn: &Connection) -> Result<(), String> {
+    // Add UNIQUE(user_id, lesson_id) to user_progress.
+    // SQLite requires a table rebuild to add a unique constraint.
+    conn.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+
+         CREATE TABLE user_progress_new (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id INTEGER NOT NULL,
+             lesson_id INTEGER NOT NULL,
+             completed INTEGER NOT NULL DEFAULT 0,
+             completed_at TEXT,
+             FOREIGN KEY (user_id) REFERENCES users(id),
+             FOREIGN KEY (lesson_id) REFERENCES lessons(id),
+             UNIQUE (user_id, lesson_id)
+         );
+
+         INSERT OR IGNORE INTO user_progress_new (user_id, lesson_id, completed, completed_at)
+         SELECT user_id, lesson_id,
+                MAX(completed),
+                MAX(completed_at)
+         FROM user_progress
+         GROUP BY user_id, lesson_id;
+
+         DROP TABLE user_progress;
+         ALTER TABLE user_progress_new RENAME TO user_progress;
+
+         PRAGMA foreign_keys=ON;",
+    )
+    .map_err(|e| format!("migrate_v2_to_v3: {}", e))
 }
 
 #[cfg(test)]
