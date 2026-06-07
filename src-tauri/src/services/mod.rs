@@ -1,5 +1,6 @@
 pub mod ai_tutor;
 pub mod analytics;
+pub mod chat_service;
 pub mod course_importer;
 pub mod feed_importer;
 pub mod github_importer;
