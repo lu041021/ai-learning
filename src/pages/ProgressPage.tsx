@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/tauri'
 import { useUserStore, useProgressStore } from '../stores'
 import { useMountedRef } from '../hooks/useMountedRef'
@@ -650,6 +650,7 @@ function CalendarHeatmap({ days }: { days: { date: string; count: number }[] }) 
 }
 
 function KnowledgeTree({ tree }: { tree: TreeNodeData[] }) {
+  const navigate = useNavigate()
   const nodeW = 110
   const layerGap = 130
   const nodeH = 28
@@ -745,7 +746,7 @@ function KnowledgeTree({ tree }: { tree: TreeNodeData[] }) {
           const y = row * (nodeH + vGap)
           const isLesson = node.kind === 'lesson'
           const slug = getSlug(node)
-          const href = isLesson && slug ? `#/courses/${slug}/lessons/${node.id}` : undefined
+          const navTo = isLesson && slug ? `/courses/${slug}/lessons/${node.id}` : undefined
           return (
             <g key={node.id}>
               <rect
@@ -757,32 +758,22 @@ function KnowledgeTree({ tree }: { tree: TreeNodeData[] }) {
                 fill={node.completed ? 'rgba(34, 197, 94, 0.12)' : 'var(--bg-tertiary)'}
                 stroke={node.completed ? 'var(--success)' : 'var(--border)'}
                 strokeWidth="1.5"
+                style={navTo ? { cursor: 'pointer' } : undefined}
+                onClick={navTo ? () => navigate(navTo) : undefined}
               />
-              {href ? (
-                <a href={href} style={{ textDecoration: 'none' }}>
-                  <text
-                    x={x + 8}
-                    y={y + nodeH / 2 + 1}
-                    dominantBaseline="middle"
-                    fill={node.completed ? 'var(--success)' : 'var(--text-secondary)'}
-                    fontSize="11"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {node.title.length > 10 ? node.title.slice(0, 10) + '...' : node.title}
-                  </text>
-                </a>
-              ) : (
-                <text
-                  x={x + 8}
-                  y={y + nodeH / 2 + 1}
-                  dominantBaseline="middle"
-                  fill={node.completed ? 'var(--success)' : 'var(--text-secondary)'}
-                  fontSize="11"
-                  fontWeight={node.kind === 'course' ? 600 : 400}
-                >
-                  {node.title.length > 10 ? node.title.slice(0, 10) + '...' : node.title}
-                </text>
-              )}
+              <text
+                x={x + 8}
+                y={y + nodeH / 2 + 1}
+                dominantBaseline="middle"
+                fill={node.completed ? 'var(--success)' : 'var(--text-secondary)'}
+                fontSize="11"
+                fontWeight={node.kind === 'course' ? 600 : 400}
+                style={
+                  navTo ? { cursor: 'pointer', pointerEvents: 'none' } : { pointerEvents: 'none' }
+                }
+              >
+                {node.title.length > 10 ? node.title.slice(0, 10) + '...' : node.title}
+              </text>
             </g>
           )
         })}

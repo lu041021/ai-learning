@@ -110,7 +110,7 @@ export function CoursePage() {
                   background: 'var(--bg-tertiary)',
                 }}
               >
-                Chapter {ci + 1}: {ch.title}
+                第 {ci + 1} 章：{ch.title}
               </div>
               {ch.lessons.length === 0 ? (
                 <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: '13px' }}>

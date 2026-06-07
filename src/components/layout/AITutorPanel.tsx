@@ -150,7 +150,7 @@ export function AITutorPanel() {
               fontSize: '16px',
             }}
           >
-            x
+            ×
           </button>
         </div>
       </div>

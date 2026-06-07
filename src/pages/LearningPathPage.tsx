@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useUserStore, useLearningPathStore, useProgressStore } from '../stores'
 import { api } from '../api/tauri'
 import type { LearningPathStep, LearningPathVersionSummary, UsageProfile } from '../types'
 
 const STEP_ICONS: Record<string, string> = {
-  course_lesson: '{ }',
-  ai_concept: '?',
-  practice_quiz: '?',
-  project: '?',
+  course_lesson: '📖',
+  ai_concept: '💡',
+  practice_quiz: '✏️',
+  project: '🛠️',
 }
 
 const STEP_COLORS: Record<string, string> = {
@@ -19,10 +19,10 @@ const STEP_COLORS: Record<string, string> = {
 }
 
 const STATUS_STYLE: Record<string, { bg: string; label: string; icon: string }> = {
-  locked: { bg: 'var(--bg-tertiary)', label: '待解锁', icon: '?' },
-  available: { bg: 'var(--accent-light)', label: '可开始', icon: '?' },
-  in_progress: { bg: 'var(--accent-light)', label: '进行中', icon: '?' },
-  completed: { bg: 'var(--success)', label: '已完成', icon: '?' },
+  locked: { bg: 'var(--bg-tertiary)', label: '待解锁', icon: '🔒' },
+  available: { bg: 'var(--accent-light)', label: '可开始', icon: '▶️' },
+  in_progress: { bg: 'var(--accent-light)', label: '进行中', icon: '⏳' },
+  completed: { bg: 'var(--success)', label: '已完成', icon: '✅' },
 }
 
 function getCourseSlug(courseId: number | null, courseMap: Map<number, string>): string {
@@ -33,7 +33,7 @@ function getCourseSlug(courseId: number | null, courseMap: Map<number, string>):
 export function LearningPathPage() {
   const userId = useUserStore((s) => s.userId)
   const completedIds = useProgressStore((s) => s.completedIds)
-  const { path, loading, generating, fetchPath, generatePath } = useLearningPathStore()
+  const { path, loading, generating, fetchPath, generatePath, resetPath } = useLearningPathStore()
   const [courseMap, setCourseMap] = useState<Map<number, string>>(new Map())
   const [versions, setVersions] = useState<LearningPathVersionSummary[]>([])
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
@@ -41,6 +41,7 @@ export function LearningPathPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [isGoalPath, setIsGoalPath] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     document.title = '学习路线 - AI 学堂'
@@ -52,6 +53,12 @@ export function LearningPathPage() {
         .catch(() => {})
     }
   }, [userId, fetchPath])
+
+  useEffect(() => {
+    if (userId && searchParams.get('autoGenerate') === '1') {
+      generatePath(userId)
+    }
+  }, [userId, searchParams, generatePath])
 
   useEffect(() => {
     api
@@ -129,6 +136,7 @@ export function LearningPathPage() {
       try {
         await api.generateGoalPath(userId)
         setIsGoalPath(true)
+        resetPath()
         fetchPath(userId)
         api
           .listLearningPathVersions(userId)

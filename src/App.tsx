@@ -127,7 +127,7 @@ class ErrorBoundary extends Component<
   }
 }
 
-function OnboardingGuard({ children }: { children: React.ReactNode }) {
+export function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const userId = useUserStore((s) => s.userId)
   const profile = useUserProfileStore((s) => s.profile)
   const setProfile = useUserProfileStore((s) => s.setProfile)
@@ -156,6 +156,24 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   }, [userId, location.pathname, profile, navigate, setProfile])
 
   return <>{children}</>
+}
+
+function GuardedPage({ Page }: { Page: React.ComponentType }) {
+  return (
+    <OnboardingGuard>
+      <Suspense fallback={<PageLoader />}>
+        <Page />
+      </Suspense>
+    </OnboardingGuard>
+  )
+}
+
+function FreePage({ Page }: { Page: React.ComponentType }) {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Page />
+    </Suspense>
+  )
 }
 
 export default function App() {
@@ -201,161 +219,29 @@ export default function App() {
           <ToastContainer />
           <SearchBar />
           <Routes>
-            <Route
-              path="/onboarding"
-              element={
-                <Suspense fallback={<PageLoader />}>
-                  <OnboardingPage />
-                </Suspense>
-              }
-            />
+            <Route path="/onboarding" element={<FreePage Page={OnboardingPage} />} />
             <Route element={<AppLayout />}>
-              <Route
-                path="/"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <HomePage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/courses"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <HomePage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/courses/:slug"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <CoursePage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
+              <Route path="/" element={<GuardedPage Page={HomePage} />} />
+              <Route path="/courses" element={<GuardedPage Page={HomePage} />} />
+              <Route path="/courses/:slug" element={<GuardedPage Page={CoursePage} />} />
               <Route
                 path="/courses/:slug/lessons/:lessonId"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <LessonPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
+                element={<GuardedPage Page={LessonPage} />}
               />
               <Route
                 path="/courses/:slug/lessons/:lessonId/quiz"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <QuizPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
+                element={<GuardedPage Page={QuizPage} />}
               />
-              <Route
-                path="/settings"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <SettingsPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/progress"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <ProgressPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/learning-path"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <LearningPathPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/import"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <ImportPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/import/github"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <GitHubImportPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/import/rss"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <RssImportPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/search"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <SearchPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/knowledge-graph"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <KnowledgeGraphPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
-              <Route
-                path="/mcp-playground"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <McpPlaygroundPage />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="/analytics"
-                element={
-                  <OnboardingGuard>
-                    <Suspense fallback={<PageLoader />}>
-                      <AnalyticsPage />
-                    </Suspense>
-                  </OnboardingGuard>
-                }
-              />
+              <Route path="/settings" element={<FreePage Page={SettingsPage} />} />
+              <Route path="/progress" element={<GuardedPage Page={ProgressPage} />} />
+              <Route path="/learning-path" element={<GuardedPage Page={LearningPathPage} />} />
+              <Route path="/import" element={<GuardedPage Page={ImportPage} />} />
+              <Route path="/import/github" element={<GuardedPage Page={GitHubImportPage} />} />
+              <Route path="/import/rss" element={<GuardedPage Page={RssImportPage} />} />
+              <Route path="/search" element={<GuardedPage Page={SearchPage} />} />
+              <Route path="/knowledge-graph" element={<GuardedPage Page={KnowledgeGraphPage} />} />
+              <Route path="/mcp-playground" element={<FreePage Page={McpPlaygroundPage} />} />
+              <Route path="/analytics" element={<GuardedPage Page={AnalyticsPage} />} />
             </Route>
           </Routes>
         </ErrorBoundary>

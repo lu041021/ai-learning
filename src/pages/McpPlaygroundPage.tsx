@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { api } from '../api/tauri'
 import { useMountedRef } from '../hooks/useMountedRef'
 
 interface McpTool {
@@ -20,10 +21,13 @@ interface McpResult {
 
 const MCP_URL = 'http://127.0.0.1:9529/mcp'
 
-async function callMcp(method: string, params?: Record<string, unknown>) {
+async function callMcp(method: string, token: string, params?: Record<string, unknown>) {
   const res = await fetch(MCP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
   })
   return res.json()
@@ -44,31 +48,35 @@ export function McpPlaygroundPage() {
   const [requestBody, setRequestBody] = useState('{}')
   const [results, setResults] = useState<McpResult[]>([])
   const [running, setRunning] = useState(false)
+  const [token, setToken] = useState('')
   const resultsEndRef = useRef<HTMLDivElement>(null)
   const mountedRef = useMountedRef()
 
   useEffect(() => {
     document.title = 'MCP Playground - AI 学堂'
 
-    // Ping to check connection
-    callMcp('ping')
-      .then((r) => {
-        if (mountedRef.current) {
-          setConnected(r.result !== undefined || !r.error)
-        }
-      })
-      .catch(() => {
-        if (mountedRef.current) setConnected(false)
-      })
+    api.getMcpToken().then((t) => {
+      if (!mountedRef.current) return
+      setToken(t)
 
-    // Fetch tool list
-    callMcp('tools/list')
-      .then((r) => {
-        if (mountedRef.current && r.result?.tools) {
-          setTools(r.result.tools)
-        }
-      })
-      .catch(() => {})
+      callMcp('ping', t)
+        .then((r) => {
+          if (mountedRef.current) {
+            setConnected(r.result !== undefined || !r.error)
+          }
+        })
+        .catch(() => {
+          if (mountedRef.current) setConnected(false)
+        })
+
+      callMcp('tools/list', t)
+        .then((r) => {
+          if (mountedRef.current && r.result?.tools) {
+            setTools(r.result.tools)
+          }
+        })
+        .catch(() => {})
+    })
   }, [mountedRef])
 
   useEffect(() => {
@@ -78,7 +86,7 @@ export function McpPlaygroundPage() {
   const runTool = async (tool: McpTool, args: Record<string, unknown> = {}) => {
     const start = performance.now()
     try {
-      const res = await callMcp('tools/call', {
+      const res = await callMcp('tools/call', token, {
         name: tool.name,
         arguments: args,
       })
@@ -142,7 +150,7 @@ export function McpPlaygroundPage() {
       ]
 
       // initialize
-      const initRes = await callMcp('initialize', {
+      const initRes = await callMcp('initialize', token, {
         protocolVersion: '2024-11-05',
         capabilities: {},
         clientInfo: { name: 'mcp-playground', version: '1.0.0' },
@@ -156,13 +164,16 @@ export function McpPlaygroundPage() {
           duration: initDuration,
         },
       ])
-      await callMcp('notifications/initialized')
+      await callMcp('notifications/initialized', token)
 
       for (const step of steps) {
         if (!step.tool) continue
         const start = performance.now()
         try {
-          const res = await callMcp('tools/call', { name: step.tool.name, arguments: step.args })
+          const res = await callMcp('tools/call', token, {
+            name: step.tool.name,
+            arguments: step.args,
+          })
           const duration = Math.round(performance.now() - start)
           const content = res.result?.content?.[0]?.text || JSON.stringify(res.result || res)
           setResults((prev) => [

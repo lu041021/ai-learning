@@ -13,6 +13,9 @@ export function createCourse(overrides?: Partial<CourseSummary>): CourseSummary 
     title: 'Test Course',
     slug: 'test-course',
     description: 'A test course',
+    difficulty: 'beginner',
+    duration_minutes: 0,
+    tags: [],
     ...overrides,
   }
 }
@@ -42,6 +45,7 @@ export function createLesson(overrides?: Partial<LessonDetail>): LessonDetail {
     title: 'Test Lesson',
     content_md: '# Test\n\nLesson content',
     order_index: 1,
+    duration_minutes: 0,
     ...overrides,
   }
 }
@@ -60,7 +64,7 @@ export function createQuizQuestion(overrides?: Partial<QuizQuestion>): QuizQuest
   return {
     id: 1,
     question_text: 'What is AI?',
-    options: JSON.stringify(['A', 'B', 'C', 'D']),
+    options: ['A', 'B', 'C', 'D'],
     explanation: 'A is correct',
     ...overrides,
   }

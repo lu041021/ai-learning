@@ -90,7 +90,7 @@ export function CourseSidebar() {
               fontSize: '16px',
             }}
           >
-            x
+            ×
           </button>
         </div>
       </div>
@@ -289,7 +289,7 @@ export function CourseSidebar() {
                           flexShrink: 0,
                         }}
                       >
-                        {isCompleted ? 'v' : ''}
+                        {isCompleted ? '✓' : ''}
                       </span>
                       {l.title}
                     </Link>

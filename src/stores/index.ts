@@ -40,8 +40,9 @@ export const useUserStore = create<UserStore>((set) => ({
       const user = await api.createUser(`Learner_${localId.slice(0, 6)}`, localId)
       saveUserId(user.id)
       set({ userId: user.id, username: user.username, loading: false })
-    } catch {
+    } catch (e) {
       set({ loading: false })
+      console.error('[userStore] createUser failed', e)
       toast.error('创建用户失败')
     }
   },
@@ -68,8 +69,9 @@ export const useProgressStore = create<ProgressStore>((set) => ({
         quizScores: p.quiz_scores,
         loaded: true,
       })
-    } catch {
+    } catch (e) {
       set({ loaded: true })
+      console.error('[progressStore] fetchProgress failed', e)
       toast.error('加载进度失败')
     }
   },
@@ -81,7 +83,8 @@ export const useProgressStore = create<ProgressStore>((set) => ({
         next.add(lessonId)
         return { completedIds: next }
       })
-    } catch {
+    } catch (e) {
+      console.error('[progressStore] markComplete failed', e)
       toast.error('标记完成失败')
     }
   },
@@ -135,7 +138,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const convs = await api.getConversations(userId)
       set({ conversations: convs, conversationsLoaded: true })
-    } catch {
+    } catch (e) {
+      console.error('[chatStore] fetchConversations failed', e)
       toast.error('加载对话列表失败')
     }
   },
@@ -146,7 +150,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         messages: msgs.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
         activeConversationId: convId,
       })
-    } catch {
+    } catch (e) {
+      console.error('[chatStore] fetchMessages failed', e)
       toast.error('加载消息失败')
     }
   },
@@ -177,10 +182,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const capturedConversationId = state.activeConversationId
 
+    // -1 表示"已注册监听、等待后端返回 convId"
+    // 事件到达时若 _streamConvId === -1，先锁定 convId 再处理，避免竞态丢 token
+    _streamConvId = -1
+
     const unlistenToken = await listen<{ token: string; conversation_id: number }>(
       'chat-token',
       (event) => {
-        if (_streamConvId !== null && event.payload.conversation_id === _streamConvId) {
+        if (_streamConvId === null) return
+        if (_streamConvId === -1) {
+          _streamConvId = event.payload.conversation_id
+        }
+        if (event.payload.conversation_id === _streamConvId) {
           set((s) => {
             const msgs = [...s.messages]
             const last = msgs[msgs.length - 1]
@@ -194,7 +207,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     )
 
     const unlistenDone = await listen<{ conversation_id: number }>('chat-done', (event) => {
-      if (_streamConvId !== null && event.payload.conversation_id === _streamConvId) {
+      if (_streamConvId === null) return
+      if (_streamConvId === -1) _streamConvId = event.payload.conversation_id
+      if (event.payload.conversation_id === _streamConvId) {
         cleanupListeners()
         set({ streamingConvId: null, conversationsLoaded: false })
         get().fetchConversations(userId)
@@ -227,7 +242,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         activeConversationId: capturedConversationId ?? convId,
       })
       return convId
-    } catch {
+    } catch (e) {
       cleanupListeners()
       set({ streamingConvId: null })
       set((s) => {
@@ -235,6 +250,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         msgs.pop()
         return { messages: msgs }
       })
+      console.error('[chatStore] sendMessage failed', e)
       toast.error('发送消息失败，请检查 API Key 是否配置正确')
       return 0
     }
@@ -262,6 +278,7 @@ interface UserProfileStore {
   loaded: boolean
   fetchProfile: (userId: number) => Promise<void>
   setProfile: (profile: UserProfileOut | null) => void
+  resetProfile: () => void
 }
 
 export const useUserProfileStore = create<UserProfileStore>((set, get) => ({
@@ -274,12 +291,14 @@ export const useUserProfileStore = create<UserProfileStore>((set, get) => ({
     try {
       const profile = await api.getUserProfile(userId)
       set({ profile, loading: false, loaded: true })
-    } catch {
+    } catch (e) {
       set({ loading: false })
+      console.error('[userProfileStore] fetchProfile failed', e)
       toast.error('加载用户画像失败')
     }
   },
   setProfile: (profile) => set({ profile, loaded: true }),
+  resetProfile: () => set({ profile: null, loaded: false }),
 }))
 
 interface LearningPathStore {
@@ -289,6 +308,7 @@ interface LearningPathStore {
   generating: boolean
   fetchPath: (userId: number) => Promise<void>
   generatePath: (userId: number) => Promise<void>
+  resetPath: () => void
 }
 
 export const useLearningPathStore = create<LearningPathStore>((set, get) => ({
@@ -316,10 +336,10 @@ export const useLearningPathStore = create<LearningPathStore>((set, get) => ({
     } catch (e) {
       set({ generating: false })
       const msg = (e as Error)?.message || String(e || '')
-      console.error('[generatePath]', msg, e)
       toast.error(msg || '生成学习路线失败')
     }
   },
+  resetPath: () => set({ path: null, loaded: false }),
 }))
 
 export const useUIStore = create<UIStore>((set) => ({

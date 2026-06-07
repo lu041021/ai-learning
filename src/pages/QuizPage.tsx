@@ -11,18 +11,6 @@ import type { Quiz, QuizResult } from '../types'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { ErrorBlock } from '../components/common/ErrorBlock'
 
-function safeParseOptions(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.every((o) => typeof o === 'string')) {
-      return parsed
-    }
-    return ['[选项加载异常]']
-  } catch {
-    return ['[选项加载异常]']
-  }
-}
-
 export function QuizPage() {
   const { slug, lessonId } = useParams<{ slug: string; lessonId: string }>()
   const [quiz, setQuiz] = useState<Quiz | null>(null)
@@ -85,12 +73,7 @@ export function QuizPage() {
         useProgressStore.getState().setQuizScore(quiz.id, res.score)
         if (res.score >= 0.7 && lessonId) {
           const lid = parseInt(lessonId)
-          api
-            .markComplete(userId, lid)
-            .then(() => {
-              useProgressStore.getState().markComplete(userId, lid)
-            })
-            .catch(() => {})
+          useProgressStore.getState().markComplete(userId, lid)
         }
       }
     } catch {
@@ -266,7 +249,6 @@ export function QuizPage() {
       ) : (
         <div style={{ display: 'grid', gap: '20px' }}>
           {quiz.questions.map((q, qi) => {
-            const options = safeParseOptions(q.options)
             return (
               <div
                 key={q.id}
@@ -281,7 +263,7 @@ export function QuizPage() {
                   {qi + 1}. {q.question_text}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {options.map((opt, oi) => (
+                  {q.options.map((opt, oi) => (
                     <button
                       key={oi}
                       onClick={() => handleSelect(qi, oi)}

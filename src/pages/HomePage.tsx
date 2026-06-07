@@ -3,9 +3,14 @@ import { Link } from 'react-router-dom'
 import { useUserStore } from '../stores'
 import { api } from '../api/tauri'
 import { useMountedRef } from '../hooks/useMountedRef'
+import { useVirtualList } from '../hooks/useVirtualList'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { ErrorBlock } from '../components/common/ErrorBlock'
 import type { CourseSummary, RecommendationItem } from '../types'
+
+const COURSE_ITEM_HEIGHT = 138
+const VIRTUAL_THRESHOLD = 50
+const VIRTUAL_CONTAINER_HEIGHT = 600
 
 export function HomePage() {
   const userId = useUserStore((s) => s.userId)
@@ -14,6 +19,16 @@ export function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useMountedRef()
+  const useVirtual = courses.length > VIRTUAL_THRESHOLD
+  const {
+    containerRef: virtualListRef,
+    onScroll: onVirtualScroll,
+    getVisibleRange,
+    totalHeight,
+  } = useVirtualList({
+    itemCount: courses.length,
+    itemHeight: COURSE_ITEM_HEIGHT,
+  })
 
   useEffect(() => {
     document.title = 'AI 学堂'
@@ -215,7 +230,21 @@ export function HomePage() {
       )}
 
       {/* All Courses */}
-      <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>全部课程</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
+        全部课程
+        {courses.length > 0 && (
+          <span
+            style={{
+              fontSize: '13px',
+              fontWeight: 400,
+              color: 'var(--text-muted)',
+              marginLeft: '8px',
+            }}
+          >
+            {courses.length} 门
+          </span>
+        )}
+      </h2>
       {courses.length === 0 ? (
         <div
           style={{
@@ -228,50 +257,80 @@ export function HomePage() {
         >
           暂无可用课程，请先导入
         </div>
+      ) : useVirtual ? (
+        <div
+          ref={virtualListRef}
+          style={{
+            height: `${VIRTUAL_CONTAINER_HEIGHT}px`,
+            overflowY: 'auto',
+            position: 'relative',
+          }}
+          onScroll={(e) => {
+            onVirtualScroll(e)
+          }}
+        >
+          <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
+            {(() => {
+              const { start, end } = getVisibleRange(VIRTUAL_CONTAINER_HEIGHT)
+              return courses.slice(start, end + 1).map((c, idx) => (
+                <div
+                  key={c.id}
+                  style={{
+                    position: 'absolute',
+                    top: `${(start + idx) * COURSE_ITEM_HEIGHT}px`,
+                    left: 0,
+                    right: 0,
+                    padding: '0 0 16px 0',
+                  }}
+                >
+                  <CourseCard course={c} />
+                </div>
+              ))
+            })()}
+          </div>
+        </div>
       ) : (
         <div style={{ display: 'grid', gap: '16px' }}>
           {courses.map((c) => (
-            <Link
-              key={c.id}
-              to={`/courses/${c.slug}`}
-              style={{
-                display: 'block',
-                padding: '24px',
-                background: 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border)',
-                transition: 'border-color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-            >
-              <h3
-                style={{
-                  fontSize: '17px',
-                  fontWeight: 600,
-                  marginBottom: '6px',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {c.title}
-              </h3>
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                {c.description}
-              </p>
-              <div
-                style={{
-                  marginTop: '12px',
-                  fontSize: '13px',
-                  color: 'var(--accent)',
-                  fontWeight: 500,
-                }}
-              >
-                开始学习 &rarr;
-              </div>
-            </Link>
+            <CourseCard key={c.id} course={c} />
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+function CourseCard({ course: c }: { course: CourseSummary }) {
+  return (
+    <Link
+      to={`/courses/${c.slug}`}
+      style={{
+        display: 'block',
+        padding: '24px',
+        background: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border)',
+        transition: 'border-color 0.2s',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+    >
+      <h3
+        style={{
+          fontSize: '17px',
+          fontWeight: 600,
+          marginBottom: '6px',
+          color: 'var(--text-primary)',
+        }}
+      >
+        {c.title}
+      </h3>
+      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        {c.description}
+      </p>
+      <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--accent)', fontWeight: 500 }}>
+        开始学习 &rarr;
+      </div>
+    </Link>
   )
 }

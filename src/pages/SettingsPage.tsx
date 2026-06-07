@@ -1,9 +1,58 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/tauri'
-import { useUserStore, useProgressStore, useChatStore } from '../stores'
+import {
+  useUserStore,
+  useProgressStore,
+  useChatStore,
+  useUserProfileStore,
+  useLearningPathStore,
+} from '../stores'
 import { toast } from '../components/ui/Toast'
 import { useTheme } from '../contexts/ThemeContext'
+
+const S = {
+  card: {
+    background: 'var(--bg-secondary)',
+    borderRadius: 'var(--radius-lg)',
+    border: '1px solid var(--border)',
+    padding: '24px',
+  } as React.CSSProperties,
+  label: {
+    display: 'block',
+    fontSize: '14px',
+    fontWeight: 600,
+    marginBottom: '8px',
+    color: 'var(--text-primary)',
+  } as React.CSSProperties,
+  hint: {
+    fontSize: '12px',
+    color: 'var(--text-muted)',
+    marginBottom: '10px',
+  } as React.CSSProperties,
+  select: {
+    width: '100%',
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text-primary)',
+    padding: '10px 14px',
+    fontSize: '14px',
+    outline: 'none',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+  input: {
+    flex: 1,
+    background: 'var(--bg-tertiary)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text-primary)',
+    padding: '10px 14px',
+    fontSize: '14px',
+    outline: 'none',
+    fontFamily: 'monospace',
+  } as React.CSSProperties,
+}
 
 const PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic (Claude)' },
@@ -55,6 +104,8 @@ export function SettingsPage() {
   const userId = useUserStore((s) => s.userId)
   const fetchProgress = useProgressStore((s) => s.fetchProgress)
   const fetchConversations = useChatStore((s) => s.fetchConversations)
+  const resetProfile = useUserProfileStore((s) => s.resetProfile)
+  const resetPath = useLearningPathStore((s) => s.resetPath)
 
   const keyInfo = PROVIDER_KEY_LABELS[apiProvider] || PROVIDER_KEY_LABELS.anthropic
   const models = PROVIDER_MODELS[apiProvider] || PROVIDER_MODELS.anthropic
@@ -64,17 +115,17 @@ export function SettingsPage() {
     api
       .getConfig()
       .then((c) => {
-        const key = c.api_key || ''
-        setApiKey(key)
-        setModel(c.model || models[0]?.value || '')
-        setApiProvider(c.api_provider || 'anthropic')
+        const provider = c.api_provider || 'anthropic'
+        setApiKey(c.api_key || '')
+        setApiProvider(provider)
+        setModel(c.model || PROVIDER_MODELS[provider]?.[0]?.value || '')
         setLoaded(true)
       })
       .catch(() => {
         setLoaded(true)
         toast.error('加载配置失败')
       })
-  }, [models])
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
@@ -105,6 +156,8 @@ export function SettingsPage() {
       await api.clearUserData(userId)
       fetchProgress(userId)
       fetchConversations(userId)
+      resetProfile()
+      resetPath()
       toast.success('数据已清除')
     } catch {
       toast.error('清除数据失败')
@@ -139,28 +192,9 @@ export function SettingsPage() {
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>设置</h1>
 
       <div style={{ display: 'grid', gap: '20px' }}>
-        <div
-          style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            padding: '24px',
-          }}
-        >
-          <label
-            style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              marginBottom: '8px',
-              color: 'var(--text-primary)',
-            }}
-          >
-            API 提供商
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-            选择使用的 AI 服务提供商
-          </p>
+        <div style={S.card}>
+          <label style={S.label}>API 提供商</label>
+          <p style={S.hint}>选择使用的 AI 服务提供商</p>
           <select
             value={apiProvider}
             onChange={(e) => {
@@ -173,17 +207,7 @@ export function SettingsPage() {
                 setModel(newModels[0]?.value || '')
               }
             }}
-            style={{
-              width: '100%',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              color: 'var(--text-primary)',
-              padding: '10px 14px',
-              fontSize: '14px',
-              outline: 'none',
-              cursor: 'pointer',
-            }}
+            style={S.select}
           >
             {PROVIDERS.map((p) => (
               <option key={p.value} value={p.value}>
@@ -193,26 +217,9 @@ export function SettingsPage() {
           </select>
         </div>
 
-        <div
-          style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            padding: '24px',
-          }}
-        >
-          <label
-            style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              marginBottom: '8px',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {keyInfo.label}
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+        <div style={S.card}>
+          <label style={S.label}>{keyInfo.label}</label>
+          <p style={S.hint}>
             用于 AI 导师和测验评分功能。可在{' '}
             <a href={keyInfo.link} target="_blank" rel="noopener noreferrer">
               {keyInfo.linkText}
@@ -225,17 +232,7 @@ export function SettingsPage() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={keyInfo.placeholder}
-              style={{
-                flex: 1,
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                color: 'var(--text-primary)',
-                padding: '10px 14px',
-                fontSize: '14px',
-                outline: 'none',
-                fontFamily: 'monospace',
-              }}
+              style={S.input}
             />
             <button
               onClick={() => setShowKey(!showKey)}
@@ -253,26 +250,9 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            padding: '24px',
-          }}
-        >
-          <label
-            style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              marginBottom: '8px',
-              color: 'var(--text-primary)',
-            }}
-          >
-            模型
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+        <div style={S.card}>
+          <label style={S.label}>模型</label>
+          <p style={S.hint}>
             选择 {PROVIDERS.find((p) => p.value === apiProvider)?.label}{' '}
             使用的模型。功能越强费用越高。
           </p>
@@ -286,18 +266,7 @@ export function SettingsPage() {
                 setCustomModel('')
               }
             }}
-            style={{
-              width: '100%',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              color: 'var(--text-primary)',
-              padding: '10px 14px',
-              fontSize: '14px',
-              outline: 'none',
-              cursor: 'pointer',
-              marginBottom: '8px',
-            }}
+            style={{ ...S.select, marginBottom: '8px' }}
           >
             {models.map((m) => (
               <option key={m.value} value={m.value}>
@@ -315,44 +284,14 @@ export function SettingsPage() {
                 setModel(e.target.value)
               }}
               placeholder="输入模型名称..."
-              style={{
-                width: '100%',
-                background: 'var(--bg-tertiary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                color: 'var(--text-primary)',
-                padding: '10px 14px',
-                fontSize: '14px',
-                outline: 'none',
-                fontFamily: 'monospace',
-                boxSizing: 'border-box',
-              }}
+              style={{ ...S.input, flex: undefined, width: '100%', boxSizing: 'border-box' }}
             />
           )}
         </div>
 
-        <div
-          style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            padding: '24px',
-          }}
-        >
-          <label
-            style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: 600,
-              marginBottom: '8px',
-              color: 'var(--text-primary)',
-            }}
-          >
-            主题
-          </label>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-            选择浅色或深色主题
-          </p>
+        <div style={S.card}>
+          <label style={S.label}>主题</label>
+          <p style={S.hint}>选择浅色或深色主题</p>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={() => handleThemeChange('dark')}

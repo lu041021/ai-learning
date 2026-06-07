@@ -191,7 +191,7 @@ export function OnboardingPage() {
   const isLast = currentQ === QUESTIONS.length - 1
 
   const handleGeneratePath = () => {
-    navigate('/learning-path')
+    navigate('/learning-path?autoGenerate=1')
   }
 
   const handleSkip = () => {

@@ -17,7 +17,9 @@ export function AppLayout() {
         transition: 'grid-template-columns 0.25s ease',
       }}
     >
-      {sidebarOpen && <CourseSidebar />}
+      <div style={{ overflow: 'hidden', visibility: sidebarOpen ? 'visible' : 'hidden' }}>
+        <CourseSidebar />
+      </div>
       <main
         role="main"
         aria-label="主要内容"
@@ -25,7 +27,9 @@ export function AppLayout() {
       >
         <Outlet />
       </main>
-      {aiPanelOpen && <AITutorPanel />}
+      <div style={{ overflow: 'hidden', visibility: aiPanelOpen ? 'visible' : 'hidden' }}>
+        <AITutorPanel />
+      </div>
     </div>
   )
 }

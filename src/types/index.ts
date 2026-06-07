@@ -45,7 +45,7 @@ export interface LessonDetail {
 export interface QuizQuestion {
   id: number
   question_text: string
-  options: string
+  options: string[]
   explanation: string
 }
 
