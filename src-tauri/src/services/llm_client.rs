@@ -18,12 +18,16 @@ static HTTP_CLIENT: LazyLock<ReqwestClient> = LazyLock::new(|| {
 pub enum LlmProvider {
     Anthropic,
     DeepSeek,
+    OpenAI,
+    Ollama,
 }
 
 impl LlmProvider {
     pub fn from_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "deepseek" => Self::DeepSeek,
+            "openai" => Self::OpenAI,
+            "ollama" => Self::Ollama,
             _ => Self::Anthropic,
         }
     }
@@ -32,6 +36,8 @@ impl LlmProvider {
         match self {
             Self::Anthropic => "https://api.anthropic.com/v1/messages",
             Self::DeepSeek => "https://api.deepseek.com/v1/chat/completions",
+            Self::OpenAI => "https://api.openai.com/v1/chat/completions",
+            Self::Ollama => "http://localhost:11434/v1/chat/completions",
         }
     }
 
@@ -44,7 +50,7 @@ impl LlmProvider {
                     None
                 }
             }
-            Self::DeepSeek => data["choices"][0]["delta"]["content"]
+            Self::DeepSeek | Self::OpenAI | Self::Ollama => data["choices"][0]["delta"]["content"]
                 .as_str()
                 .map(|s| s.to_string()),
         }
@@ -66,13 +72,14 @@ impl LlmClient {
         }
     }
 
-    fn build_headers(&self) -> (String, String) {
+    fn build_headers(&self) -> Option<(String, String)> {
         match self.provider {
-            LlmProvider::Anthropic => ("x-api-key".to_string(), self.api_key.clone()),
-            LlmProvider::DeepSeek => (
+            LlmProvider::Anthropic => Some(("x-api-key".to_string(), self.api_key.clone())),
+            LlmProvider::DeepSeek | LlmProvider::OpenAI => Some((
                 "Authorization".to_string(),
                 format!("Bearer {}", self.api_key),
-            ),
+            )),
+            LlmProvider::Ollama => None,
         }
     }
 
@@ -89,7 +96,7 @@ impl LlmClient {
                 "system": system_prompt,
                 "messages": user_message,
             }),
-            LlmProvider::DeepSeek => {
+            LlmProvider::DeepSeek | LlmProvider::OpenAI | LlmProvider::Ollama => {
                 let mut messages: Vec<serde_json::Value> = vec![json!({
                     "role": "system",
                     "content": system_prompt,
@@ -107,7 +114,8 @@ impl LlmClient {
     fn parse_response_text(&self, body: &serde_json::Value) -> Option<String> {
         match self.provider {
             LlmProvider::Anthropic => body["content"][0]["text"].as_str().map(|s| s.to_string()),
-            LlmProvider::DeepSeek => body["choices"][0]["message"]["content"]
+            LlmProvider::DeepSeek | LlmProvider::OpenAI | LlmProvider::Ollama => body["choices"][0]
+                ["message"]["content"]
                 .as_str()
                 .map(|s| s.to_string()),
         }
@@ -119,18 +127,18 @@ impl LlmClient {
         user_message: &str,
         max_tokens: u32,
     ) -> Result<String, String> {
-        let (header_name, header_value) = self.build_headers();
+        let auth_header = self.build_headers();
         let body = self.build_body(
             system_prompt,
             vec![json!({"role": "user", "content": user_message})],
             max_tokens,
         );
 
-        let mut req = HTTP_CLIENT
-            .post(self.provider.endpoint())
-            .header(&header_name, &header_value)
-            .json(&body);
+        let mut req = HTTP_CLIENT.post(self.provider.endpoint()).json(&body);
 
+        if let Some((name, value)) = auth_header {
+            req = req.header(name, value);
+        }
         if self.provider == LlmProvider::Anthropic {
             req = req.header("anthropic-version", "2023-06-01");
         }
@@ -168,15 +176,15 @@ impl LlmClient {
         messages: Vec<serde_json::Value>,
         max_tokens: u32,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>, String> {
-        let (header_name, header_value) = self.build_headers();
+        let auth_header = self.build_headers();
         let mut body = self.build_body(system_prompt, messages, max_tokens);
         body["stream"] = json!(true);
 
-        let mut req = HTTP_CLIENT
-            .post(self.provider.endpoint())
-            .header(&header_name, &header_value)
-            .json(&body);
+        let mut req = HTTP_CLIENT.post(self.provider.endpoint()).json(&body);
 
+        if let Some((name, value)) = auth_header {
+            req = req.header(name, value);
+        }
         if self.provider == LlmProvider::Anthropic {
             req = req.header("anthropic-version", "2023-06-01");
         }

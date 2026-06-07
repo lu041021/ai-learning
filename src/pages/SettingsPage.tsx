@@ -57,6 +57,8 @@ const S = {
 const PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic (Claude)' },
   { value: 'deepseek', label: 'DeepSeek' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'ollama', label: 'Ollama (本地)' },
 ]
 
 const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
@@ -69,11 +71,21 @@ const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
     { value: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
     { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' },
   ],
+  openai: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { value: 'o3-mini', label: 'o3-mini' },
+  ],
+  ollama: [
+    { value: 'llama3.2', label: 'Llama 3.2' },
+    { value: 'qwen2.5', label: 'Qwen 2.5' },
+    { value: 'deepseek-r1', label: 'DeepSeek R1' },
+  ],
 }
 
 const PROVIDER_KEY_LABELS: Record<
   string,
-  { label: string; placeholder: string; link: string; linkText: string }
+  { label: string; placeholder: string; link: string; linkText: string; optional?: boolean }
 > = {
   anthropic: {
     label: 'Anthropic API Key',
@@ -86,6 +98,19 @@ const PROVIDER_KEY_LABELS: Record<
     placeholder: 'sk-...',
     link: 'https://platform.deepseek.com/api_keys',
     linkText: 'platform.deepseek.com',
+  },
+  openai: {
+    label: 'OpenAI API Key',
+    placeholder: 'sk-...',
+    link: 'https://platform.openai.com/api-keys',
+    linkText: 'platform.openai.com',
+  },
+  ollama: {
+    label: 'Ollama 地址（可选）',
+    placeholder: 'http://localhost:11434（默认）',
+    link: 'https://ollama.com',
+    linkText: 'ollama.com',
+    optional: true,
   },
 }
 
@@ -220,34 +245,42 @@ export function SettingsPage() {
         <div style={S.card}>
           <label style={S.label}>{keyInfo.label}</label>
           <p style={S.hint}>
-            用于 AI 导师和测验评分功能。可在{' '}
-            <a href={keyInfo.link} target="_blank" rel="noopener noreferrer">
-              {keyInfo.linkText}
-            </a>{' '}
-            获取。
+            {keyInfo.optional ? (
+              '使用本地 Ollama 服务，无需 API Key。确保 Ollama 已在本地运行。'
+            ) : (
+              <>
+                用于 AI 导师和测验评分功能。可在{' '}
+                <a href={keyInfo.link} target="_blank" rel="noopener noreferrer">
+                  {keyInfo.linkText}
+                </a>{' '}
+                获取。
+              </>
+            )}
           </p>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={keyInfo.placeholder}
-              style={S.input}
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              style={{
-                padding: '10px 14px',
-                background: 'var(--bg-tertiary)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                fontSize: '13px',
-              }}
-            >
-              {showKey ? '隐藏' : '显示'}
-            </button>
-          </div>
+          {!keyInfo.optional && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={keyInfo.placeholder}
+                style={S.input}
+              />
+              <button
+                onClick={() => setShowKey(!showKey)}
+                style={{
+                  padding: '10px 14px',
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: '13px',
+                }}
+              >
+                {showKey ? '隐藏' : '显示'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div style={S.card}>
