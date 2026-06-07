@@ -1,5 +1,5 @@
+use crate::db::DbPool;
 use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use crate::models::dashboard::{
@@ -7,11 +7,8 @@ use crate::models::dashboard::{
 };
 
 #[tauri::command]
-pub fn get_dashboard_data(
-    user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<DashboardData, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_dashboard_data(user_id: i64, db: State<'_, DbPool>) -> Result<DashboardData, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let (total_lessons, completed_lessons) = {
         let mut stmt = conn

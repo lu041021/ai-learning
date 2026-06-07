@@ -1,5 +1,4 @@
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
+use crate::db::DbPool;
 use tauri::State;
 
 use crate::models::user::UserOut;
@@ -8,9 +7,9 @@ use crate::models::user::UserOut;
 pub fn create_user(
     username: String,
     local_id: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<UserOut, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     // Check if user already exists by local_id
     let existing: Option<(i64, String, String)> = conn
@@ -44,11 +43,8 @@ pub fn create_user(
 }
 
 #[tauri::command]
-pub fn get_user_by_local(
-    local_id: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<UserOut, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_user_by_local(local_id: String, db: State<'_, DbPool>) -> Result<UserOut, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT id, username, local_id FROM users WHERE local_id = ?1",
         rusqlite::params![local_id],

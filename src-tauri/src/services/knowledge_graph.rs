@@ -1,7 +1,6 @@
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,11 +28,8 @@ pub struct KnowledgeGraphData {
     pub positions: Vec<[f64; 2]>, // pre-computed layout positions
 }
 
-pub fn build_knowledge_graph(
-    db: &Arc<Mutex<Connection>>,
-    user_id: i64,
-) -> Result<KnowledgeGraphData, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn build_knowledge_graph(db: &DbPool, user_id: i64) -> Result<KnowledgeGraphData, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
         .prepare(

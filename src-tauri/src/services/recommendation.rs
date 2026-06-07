@@ -1,7 +1,6 @@
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,11 +16,8 @@ pub struct RecommendationItem {
     pub completed_lessons: i64,
 }
 
-pub fn get_recommendations(
-    db: &Arc<Mutex<Connection>>,
-    user_id: i64,
-) -> Result<Vec<RecommendationItem>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_recommendations(db: &DbPool, user_id: i64) -> Result<Vec<RecommendationItem>, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     // Get user profile
     let (interests, experience_level) = match conn.query_row(

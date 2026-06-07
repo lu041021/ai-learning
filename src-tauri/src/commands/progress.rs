@@ -1,6 +1,5 @@
-use rusqlite::Connection;
+use crate::db::DbPool;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use crate::commands::config_cmd::ConfigState;
@@ -8,11 +7,8 @@ use crate::models::progress::{ProgressOut, QuizResult, WrongAnswerItem};
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
 #[tauri::command]
-pub fn get_progress(
-    user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<ProgressOut, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_progress(user_id: i64, db: State<'_, DbPool>) -> Result<ProgressOut, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let mut p_stmt = conn
         .prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")
@@ -49,9 +45,9 @@ pub fn get_progress(
 pub fn mark_complete(
     user_id: i64,
     lesson_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<String, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at)
@@ -73,7 +69,7 @@ pub async fn submit_quiz(
     user_id: i64,
     quiz_id: i64,
     answers: Vec<i64>,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<QuizResult, String> {
     let (api_key, model, api_provider) = {
@@ -85,7 +81,7 @@ pub async fn submit_quiz(
         )
     };
     let questions_data: Vec<crate::services::quiz_grader::QuizQuestionData> = {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare("SELECT question_text, options, correct_answer_index, explanation FROM quiz_questions WHERE quiz_id = ?1")
             .map_err(|e| e.to_string())?;
@@ -112,7 +108,7 @@ pub async fn submit_quiz(
     let correct = (score * total as f64).round() as i64;
 
     {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO quiz_attempts (user_id, quiz_id, score, answers, feedback, next_step_recommendation) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![
@@ -159,8 +155,8 @@ pub async fn submit_quiz(
 }
 
 #[tauri::command]
-pub fn clear_user_data(user_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> Result<(), String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn clear_user_data(user_id: i64, db: State<'_, DbPool>) -> Result<(), String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?1)",
         rusqlite::params![user_id],
@@ -197,9 +193,9 @@ pub fn clear_user_data(user_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> R
 #[tauri::command]
 pub fn get_wrong_answers(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Vec<WrongAnswerItem>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
         .prepare(

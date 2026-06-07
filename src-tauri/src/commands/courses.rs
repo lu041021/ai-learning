@@ -1,5 +1,4 @@
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
+use crate::db::DbPool;
 use tauri::State;
 
 use crate::models::course::{
@@ -9,11 +8,11 @@ use crate::models::course::{
 
 #[tauri::command]
 pub fn list_courses(
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<CourseSummary>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(200);
     let offset = offset.unwrap_or(0);
     let mut stmt = conn
@@ -44,11 +43,8 @@ pub fn list_courses(
 }
 
 #[tauri::command]
-pub fn get_course(
-    slug: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<CourseDetail, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_course(slug: String, db: State<'_, DbPool>) -> Result<CourseDetail, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let course = conn
         .query_row(
@@ -143,11 +139,8 @@ pub fn get_course(
 }
 
 #[tauri::command]
-pub fn get_lesson(
-    lesson_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<LessonDetail, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_lesson(lesson_id: i64, db: State<'_, DbPool>) -> Result<LessonDetail, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT id, title, content_md, order_index, chapter_id, duration_minutes \
          FROM lessons WHERE id = ?1",
@@ -167,8 +160,8 @@ pub fn get_lesson(
 }
 
 #[tauri::command]
-pub fn get_quiz(lesson_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> Result<QuizOut, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_quiz(lesson_id: i64, db: State<'_, DbPool>) -> Result<QuizOut, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let (quiz_id, quiz_title) = conn
         .query_row(

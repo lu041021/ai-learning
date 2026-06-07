@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,11 +15,11 @@ pub struct StreamCancellers(pub Mutex<HashMap<i64, Arc<AtomicBool>>>);
 #[tauri::command]
 pub fn list_conversations(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ConversationOut>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
     let mut stmt = conn
@@ -41,11 +41,8 @@ pub fn list_conversations(
 }
 
 #[tauri::command]
-pub fn get_messages(
-    conv_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<Vec<MessageOut>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_messages(conv_id: i64, db: State<'_, DbPool>) -> Result<Vec<MessageOut>, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, role, content, created_at FROM messages WHERE conversation_id = ?1 ORDER BY created_at")
         .map_err(|e| e.to_string())?;
@@ -86,8 +83,8 @@ pub async fn send_chat(
     let max_history = max_chat_history.unwrap_or(20);
 
     let prepared = {
-        let db = app_handle.state::<Arc<Mutex<Connection>>>();
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let db = app_handle.state::<DbPool>();
+        let conn = db.get().map_err(|e| e.to_string())?;
         prepare_conversation(
             &conn,
             user_id,
@@ -116,8 +113,8 @@ pub async fn send_chat(
                 "chat-token",
                 json!({"token": no_key_msg, "conversation_id": conv_id}),
             );
-            if let Some(db) = handle.try_state::<Arc<Mutex<Connection>>>() {
-                if let Ok(conn) = db.lock() {
+            if let Some(db) = handle.try_state::<DbPool>() {
+                if let Ok(conn) = db.get() {
                     let _ = conn.execute(
                         "INSERT INTO messages (conversation_id, role, content) VALUES (?1, 'assistant', ?2)",
                         rusqlite::params![conv_id, no_key_msg],

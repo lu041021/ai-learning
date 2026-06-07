@@ -1,6 +1,6 @@
+use crate::db::DbPool;
 use rusqlite::Connection;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use crate::commands::config_cmd::ConfigState;
@@ -14,7 +14,7 @@ use crate::services::profile_builder::{ProfileBuildData, QuizHistoryItem};
 #[tauri::command]
 pub async fn assess_user_skill(
     input: AssessUserSkillInput,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<UserProfileOut, String> {
     let (api_key, model, api_provider) = {
@@ -33,7 +33,7 @@ pub async fn assess_user_skill(
     let assessment: SkillAssessment =
         crate::services::skill_assessor::assess_skill(&input.responses, &client).await?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let interests_json = serde_json::to_string(&assessment.interests).unwrap_or_default();
     let responses_json = serde_json::to_string(&input.responses).unwrap_or_default();
@@ -88,9 +88,9 @@ pub async fn assess_user_skill(
 #[tauri::command]
 pub fn get_user_profile(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Option<UserProfileOut>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let result = conn.query_row(
         "SELECT id, user_id, experience_level, interests, learning_goals, assessment_completed, summary FROM user_profiles WHERE user_id = ?1",
         rusqlite::params![user_id],
@@ -118,7 +118,7 @@ pub fn get_user_profile(
 #[tauri::command]
 pub async fn generate_learning_path(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
     let (api_key, model, api_provider) = {
@@ -142,7 +142,7 @@ pub async fn generate_learning_path(
         quiz_avg,
         course_outline,
     ) = {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
 
         let (el, interests_str, lg) = conn
             .query_row(
@@ -220,7 +220,7 @@ pub async fn generate_learning_path(
         "quiz_avg": quiz_avg,
     }))
     .unwrap_or_default();
-    let mut conn = db.lock().map_err(|e| e.to_string())?;
+    let mut conn = db.get().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute(
@@ -258,9 +258,9 @@ pub async fn generate_learning_path(
 #[tauri::command]
 pub fn get_learning_path(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Option<LearningPathOut>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let result = conn.query_row(
         "SELECT id, steps_json, generated_at, updated_at FROM learning_path_history WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
@@ -319,9 +319,9 @@ pub struct LearningPathVersionSummary {
 #[tauri::command]
 pub fn list_learning_path_versions(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Vec<LearningPathVersionSummary>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT id, version, is_active, generated_at, steps_json FROM learning_path_history WHERE user_id = ?1 ORDER BY version DESC")
         .map_err(|e| e.to_string())?;
@@ -348,9 +348,9 @@ pub fn list_learning_path_versions(
 pub fn get_learning_path_version(
     user_id: i64,
     version_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Option<LearningPathOut>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let result = conn.query_row(
         "SELECT id, steps_json, generated_at, updated_at FROM learning_path_history WHERE id = ?1 AND user_id = ?2",
         rusqlite::params![version_id, user_id],
@@ -446,7 +446,7 @@ pub fn build_course_outline(conn: &Connection) -> Result<String, String> {
 #[tauri::command]
 pub async fn assess_user_skill_deep(
     input: AssessUserSkillInput,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<UserProfileFull, String> {
     let (api_key, model, api_provider) = {
@@ -477,7 +477,7 @@ pub async fn assess_user_skill_deep(
         wrong_concepts,
         domain_accuracy,
     ) = {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
         gather_profile_data(&conn, input.user_id, &input.responses)?
     };
 
@@ -528,7 +528,7 @@ pub async fn assess_user_skill_deep(
     let profile_json = serde_json::to_string(&profile).unwrap_or_default();
     let interests_json =
         serde_json::to_string(&profile.interests).unwrap_or_else(|_| "[]".to_string());
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO user_profiles (user_id, experience_level, interests, learning_goals, assessment_completed, profile_data, updated_at)
@@ -556,7 +556,7 @@ pub async fn assess_user_skill_deep(
 #[tauri::command]
 pub async fn generate_enriched_learning_path(
     user_id: i64,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
     let (api_key, model, api_provider) = {
@@ -572,7 +572,7 @@ pub async fn generate_enriched_learning_path(
     }
 
     let (profile, course_outline) = {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
 
         let profile_json: String = conn
             .query_row(
@@ -608,7 +608,7 @@ pub async fn generate_enriched_learning_path(
 
     let steps_json = serde_json::to_string(&steps).unwrap_or_default();
     let context_snapshot = serde_json::to_string(&profile).unwrap_or_default();
-    let mut conn = db.lock().map_err(|e| e.to_string())?;
+    let mut conn = db.get().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
 
     tx.execute(

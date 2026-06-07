@@ -1,6 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use crate::commands::config_cmd::ConfigState;
+use crate::db::DbPool;
 use crate::models::learning_path::{LearningPathOut, LearningPathStep};
 use crate::models::usage_profile::UsageProfile;
 use crate::services::llm_client::{LlmClient, LlmProvider};
@@ -25,7 +24,7 @@ pub async fn analyze_usage(config: tauri::State<'_, ConfigState>) -> Result<Usag
 #[tauri::command]
 pub async fn generate_goal_path(
     user_id: i64,
-    db: tauri::State<'_, Arc<Mutex<rusqlite::Connection>>>,
+    db: tauri::State<'_, DbPool>,
     config: tauri::State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
     let (api_key, model, api_provider) = {
@@ -100,7 +99,7 @@ pub async fn generate_goal_path(
         quiz_avg,
         course_outline,
     ) = {
-        let conn = db.lock().map_err(|e| e.to_string())?;
+        let conn = db.get().map_err(|e| e.to_string())?;
 
         let (el, interests_str, lg) = conn
             .query_row(
@@ -170,7 +169,7 @@ pub async fn generate_goal_path(
         "usage_context": usage_context,
     }))
     .unwrap_or_default();
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",

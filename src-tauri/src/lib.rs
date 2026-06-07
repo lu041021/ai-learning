@@ -63,9 +63,8 @@ pub fn run() {
             let db_path = app_data_dir.join("learning_platform.db");
             let cfg_path = config::config_path(&app_data_dir);
 
-            let conn = db::initialize(&db_path)?;
-            let db = Arc::new(Mutex::new(conn));
-            app.manage(db.clone());
+            let pool = db::initialize(&db_path)?;
+            app.manage(pool.clone());
 
             let app_config = config::load_config(&cfg_path);
             app.manage(ConfigState {
@@ -81,7 +80,7 @@ pub fn run() {
             let mcp_port: u16 = 9529;
             let mcp_token = generate_token();
             app.manage(McpToken(mcp_token.clone()));
-            services::mcp_server::start_mcp_server(db, mcp_port, mcp_token);
+            services::mcp_server::start_mcp_server(pool, mcp_port, mcp_token);
             println!("[MCP] Server started on http://127.0.0.1:{}", mcp_port);
 
             Ok(())

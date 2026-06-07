@@ -1,5 +1,4 @@
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
+use crate::db::DbPool;
 use tauri::State;
 
 use crate::commands::config_cmd::ConfigState;
@@ -40,7 +39,7 @@ fn validate_https_url(url: &str) -> Result<(), String> {
 #[tauri::command]
 pub async fn import_from_url(
     url: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
     config: State<'_, ConfigState>,
 ) -> Result<ImportCourseResult, String> {
     validate_https_url(&url)?;
@@ -56,17 +55,17 @@ pub async fn import_from_url(
     let ai_course =
         crate::services::course_importer::fetch_and_structure_course(&url, &client).await?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     crate::services::course_importer::insert_course_to_db(&conn, &ai_course, &url)
 }
 
 #[tauri::command]
 pub fn check_import_url(
     url: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<DuplicateCheckResult, String> {
     validate_https_url(&url)?;
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     crate::services::course_importer::check_duplicate_url(&conn, &url)
 }
 
@@ -87,39 +86,33 @@ pub async fn preview_import_link(url: String) -> Result<LinkPreview, String> {
 }
 
 #[tauri::command]
-pub fn subscribe_feed(
-    feed_url: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<FeedSubscription, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn subscribe_feed(feed_url: String, db: State<'_, DbPool>) -> Result<FeedSubscription, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     crate::services::feed_importer::subscribe_feed(&conn, &feed_url, "")
 }
 
 #[tauri::command]
-pub fn unsubscribe_feed(id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> Result<(), String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn unsubscribe_feed(id: i64, db: State<'_, DbPool>) -> Result<(), String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     crate::services::feed_importer::unsubscribe_feed(&conn, id)
 }
 
 #[tauri::command]
-pub fn list_feed_subscriptions(
-    db: State<'_, Arc<Mutex<Connection>>>,
-) -> Result<Vec<FeedSubscription>, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn list_feed_subscriptions(db: State<'_, DbPool>) -> Result<Vec<FeedSubscription>, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     crate::services::feed_importer::list_subscriptions(&conn)
 }
 
 #[tauri::command]
 pub async fn fetch_feed_articles(
     feed_url: String,
-    db: State<'_, Arc<Mutex<Connection>>>,
+    db: State<'_, DbPool>,
 ) -> Result<Vec<FeedArticle>, String> {
     validate_https_url(&feed_url)?;
     let (feed_title, articles) =
         crate::services::feed_importer::fetch_feed_articles(&feed_url).await?;
 
-    // Update feed title and last_fetched in DB
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     if !feed_title.is_empty() {
         let _ = conn.execute(
             "UPDATE feed_subscriptions SET feed_title = ?1 WHERE feed_url = ?2",

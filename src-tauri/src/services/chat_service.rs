@@ -1,6 +1,7 @@
+use crate::db::DbPool;
 use rusqlite::Connection;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::services::llm_client::LlmClient;
@@ -136,8 +137,8 @@ pub async fn stream_response(handle: AppHandle, req: StreamRequest) {
         let title = generate_title(&llm_client, &user_msg)
             .await
             .unwrap_or_else(|_| truncate_title(&user_msg, 80));
-        if let Some(db) = handle.try_state::<Arc<Mutex<Connection>>>() {
-            if let Ok(conn) = db.lock() {
+        if let Some(db) = handle.try_state::<DbPool>() {
+            if let Ok(conn) = db.get() {
                 conn.execute(
                     "UPDATE conversations SET title = ?1 WHERE id = ?2",
                     rusqlite::params![title, conv_id],
@@ -171,8 +172,8 @@ async fn generate_title(client: &LlmClient, user_msg: &str) -> Result<String, St
 }
 
 fn save_assistant(handle: &AppHandle, conv_id: i64, content: &str) {
-    if let Some(db) = handle.try_state::<Arc<Mutex<Connection>>>() {
-        if let Ok(conn) = db.lock() {
+    if let Some(db) = handle.try_state::<DbPool>() {
+        if let Ok(conn) = db.get() {
             conn.execute(
                 "INSERT INTO messages (conversation_id, role, content) VALUES (?1, 'assistant', ?2)",
                 rusqlite::params![conv_id, content],

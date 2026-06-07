@@ -1,6 +1,5 @@
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,28 +14,23 @@ pub struct SearchResult {
     pub rank: f64,
 }
 
-pub fn search_all(
-    db: &Arc<Mutex<Connection>>,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<SearchResult>, String> {
+pub fn search_all(db: &DbPool, query: &str, limit: usize) -> Result<Vec<SearchResult>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
-
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM search_index", [], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
-    if count == 0 {
-        drop(conn);
-        seed_fts_index(db)?;
-    } else {
-        drop(conn);
+    {
+        let conn = db.get().map_err(|e| e.to_string())?;
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM search_index", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        if count == 0 {
+            drop(conn);
+            seed_fts_index(db)?;
+        }
     }
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let fts_query = query
         .split_whitespace()
         .map(|w| {
@@ -98,8 +92,8 @@ pub fn search_all(
     Ok(rows)
 }
 
-fn seed_fts_index(db: &Arc<Mutex<Connection>>) -> Result<(), String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+fn seed_fts_index(db: &DbPool) -> Result<(), String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     conn.execute_batch(
         "INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
@@ -119,39 +113,39 @@ fn seed_fts_index(db: &Arc<Mutex<Connection>>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
+    use r2d2_sqlite::SqliteConnectionManager;
 
-    fn setup_db() -> Arc<Mutex<Connection>> {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE courses (id INTEGER PRIMARY KEY, title TEXT, slug TEXT UNIQUE, description TEXT DEFAULT '');
-             CREATE TABLE chapters (id INTEGER PRIMARY KEY, course_id INTEGER, title TEXT, order_index INTEGER);
-             CREATE TABLE lessons (id INTEGER PRIMARY KEY, chapter_id INTEGER, title TEXT, content_md TEXT DEFAULT '', order_index INTEGER);
-             CREATE TABLE quizzes (id INTEGER PRIMARY KEY, lesson_id INTEGER, title TEXT DEFAULT '');
-             CREATE TABLE quiz_questions (id INTEGER PRIMARY KEY, quiz_id INTEGER, question_text TEXT, options TEXT DEFAULT '[]', correct_answer_index INTEGER, explanation TEXT DEFAULT '');
-
-             CREATE VIRTUAL TABLE search_index USING fts5(source_type, source_id, title, content, context_id, context_type);",
-        ).unwrap();
-
-        conn.execute_batch(
-            "INSERT INTO courses VALUES (1, 'Machine Learning', 'machine-learning', 'An introduction to ML');
-             INSERT INTO chapters VALUES (1, 1, 'Basics', 1);
-             INSERT INTO lessons VALUES (1, 1, 'What is ML', 'Machine Learning is a subset of AI', 1);
-             INSERT INTO quizzes VALUES (1, 1, 'ML Quiz');
-             INSERT INTO quiz_questions VALUES (1, 1, 'What does ML stand for?', '[]', 0, 'Machine Learning');
-
-             INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
-             SELECT 'course', id, title, description, id, 'course' FROM courses;
-             INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
-             SELECT 'lesson', l.id, l.title, l.content_md, ch.course_id, 'course'
-             FROM lessons l JOIN chapters ch ON ch.id = l.chapter_id;
-             INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
-             SELECT 'quiz_question', qq.id, qq.question_text, qq.explanation, qz.lesson_id, 'lesson'
-             FROM quiz_questions qq JOIN quizzes qz ON qz.id = qq.quiz_id;",
-        ).unwrap();
-
-        Arc::new(Mutex::new(conn))
+    fn setup_db() -> DbPool {
+        let manager = SqliteConnectionManager::memory().with_init(|conn| {
+            conn.execute_batch(
+                "CREATE TABLE courses (id INTEGER PRIMARY KEY, title TEXT, slug TEXT UNIQUE, description TEXT DEFAULT '');
+                 CREATE TABLE chapters (id INTEGER PRIMARY KEY, course_id INTEGER, title TEXT, order_index INTEGER);
+                 CREATE TABLE lessons (id INTEGER PRIMARY KEY, chapter_id INTEGER, title TEXT, content_md TEXT DEFAULT '', order_index INTEGER);
+                 CREATE TABLE quizzes (id INTEGER PRIMARY KEY, lesson_id INTEGER, title TEXT DEFAULT '');
+                 CREATE TABLE quiz_questions (id INTEGER PRIMARY KEY, quiz_id INTEGER, question_text TEXT, options TEXT DEFAULT '[]', correct_answer_index INTEGER, explanation TEXT DEFAULT '');
+                 CREATE VIRTUAL TABLE search_index USING fts5(source_type, source_id, title, content, context_id, context_type);",
+            )
+        });
+        let pool = r2d2::Pool::builder().max_size(1).build(manager).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            conn.execute_batch(
+                "INSERT INTO courses VALUES (1, 'Machine Learning', 'machine-learning', 'An introduction to ML');
+                 INSERT INTO chapters VALUES (1, 1, 'Basics', 1);
+                 INSERT INTO lessons VALUES (1, 1, 'What is ML', 'Machine Learning is a subset of AI', 1);
+                 INSERT INTO quizzes VALUES (1, 1, 'ML Quiz');
+                 INSERT INTO quiz_questions VALUES (1, 1, 'What does ML stand for?', '[]', 0, 'Machine Learning');
+                 INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
+                 SELECT 'course', id, title, description, id, 'course' FROM courses;
+                 INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
+                 SELECT 'lesson', l.id, l.title, l.content_md, ch.course_id, 'course'
+                 FROM lessons l JOIN chapters ch ON ch.id = l.chapter_id;
+                 INSERT INTO search_index(source_type, source_id, title, content, context_id, context_type)
+                 SELECT 'quiz_question', qq.id, qq.question_text, qq.explanation, qz.lesson_id, 'lesson'
+                 FROM quiz_questions qq JOIN quizzes qz ON qz.id = qq.quiz_id;",
+            ).unwrap();
+        }
+        pool
     }
 
     #[test]

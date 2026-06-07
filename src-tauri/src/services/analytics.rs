@@ -1,7 +1,7 @@
+use crate::db::DbPool;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,8 +64,8 @@ pub struct WeakArea {
     pub lesson_id: i64,
 }
 
-pub fn get_analytics(db: &Arc<Mutex<Connection>>, user_id: i64) -> Result<AnalyticsData, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+pub fn get_analytics(db: &DbPool, user_id: i64) -> Result<AnalyticsData, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     // Completion + accuracy + quiz review stats — 2 queries instead of 5
     let (total_lessons, completed_lessons) = conn

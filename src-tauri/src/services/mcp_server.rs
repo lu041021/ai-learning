@@ -1,7 +1,6 @@
 use std::io::Cursor;
-use std::sync::{Arc, Mutex};
 
-use rusqlite::Connection;
+use crate::db::DbPool;
 use serde_json::{json, Value};
 
 fn to_json(v: &impl serde::Serialize) -> Result<String, String> {
@@ -83,7 +82,7 @@ fn check_auth(request: &tiny_http::Request, token: &str, allowed_origin: &str) -
 
 fn handle_mcp_request(
     request: &mut tiny_http::Request,
-    db: &Arc<Mutex<Connection>>,
+    db: &DbPool,
     token: &str,
     allowed_origin: &str,
 ) -> McpResponse {
@@ -244,7 +243,7 @@ fn handle_tools_list(id: Value) -> McpResponse {
     }))
 }
 
-fn handle_tools_call(id: Value, params: &Value, db: &Arc<Mutex<Connection>>) -> McpResponse {
+fn handle_tools_call(id: Value, params: &Value, db: &DbPool) -> McpResponse {
     let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
@@ -276,8 +275,8 @@ fn handle_tools_call(id: Value, params: &Value, db: &Arc<Mutex<Connection>>) -> 
     }
 }
 
-fn handle_resources_list(id: Value, db: &Arc<Mutex<Connection>>) -> McpResponse {
-    let conn = match db.lock() {
+fn handle_resources_list(id: Value, db: &DbPool) -> McpResponse {
+    let conn = match db.get() {
         Ok(c) => c,
         Err(e) => {
             return json_response(json!({
@@ -322,7 +321,7 @@ fn handle_resources_list(id: Value, db: &Arc<Mutex<Connection>>) -> McpResponse 
     json_response(json!({"jsonrpc":"2.0","id":id,"result":{"resources":resources}}))
 }
 
-fn handle_resources_read(id: Value, params: &Value, db: &Arc<Mutex<Connection>>) -> McpResponse {
+fn handle_resources_read(id: Value, params: &Value, db: &DbPool) -> McpResponse {
     let uri = params.get("uri").and_then(|u| u.as_str()).unwrap_or("");
 
     let result = if uri == "courses://list" {
@@ -353,8 +352,8 @@ fn handle_resources_read(id: Value, params: &Value, db: &Arc<Mutex<Connection>>)
 
 // ─── Tool Implementations ───
 
-fn tool_list_courses(db: &Arc<Mutex<Connection>>) -> Result<String, String> {
-    let conn = db.lock().map_err(|e| e.to_string())?;
+fn tool_list_courses(db: &DbPool) -> Result<String, String> {
+    let conn = db.get().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT id, title, slug, description, source_type FROM courses ORDER BY id LIMIT 200",
@@ -376,13 +375,13 @@ fn tool_list_courses(db: &Arc<Mutex<Connection>>) -> Result<String, String> {
     to_json(&rows)
 }
 
-fn tool_get_course(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_course(db: &DbPool, args: &Value) -> Result<String, String> {
     let slug = args
         .get("slug")
         .and_then(|s| s.as_str())
         .ok_or("Missing 'slug' parameter")?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let course = conn
         .query_row(
@@ -446,13 +445,13 @@ fn tool_get_course(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, 
     to_json(&result)
 }
 
-fn tool_get_lesson(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_lesson(db: &DbPool, args: &Value) -> Result<String, String> {
     let lesson_id = args
         .get("lesson_id")
         .and_then(|v| v.as_i64())
         .ok_or("Missing 'lesson_id' parameter")?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let lesson = conn
         .query_row(
             "SELECT l.id, l.title, l.content_md, l.order_index, l.chapter_id, ch.title as chapter_title, c.title as course_title, c.slug as course_slug
@@ -479,10 +478,10 @@ fn tool_get_lesson(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, 
     to_json(&lesson)
 }
 
-fn tool_get_progress(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_progress(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let mut p_stmt = conn
         .prepare("SELECT lesson_id FROM user_progress WHERE user_id = ?1 AND completed = 1")
@@ -516,10 +515,10 @@ fn tool_get_progress(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String
     to_json(&result)
 }
 
-fn tool_get_dashboard(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_dashboard(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
 
     let (total_lessons, completed_lessons) = {
         let total: i64 = conn
@@ -594,13 +593,13 @@ fn tool_get_dashboard(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Strin
     to_json(&result)
 }
 
-fn tool_search_courses(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_search_courses(db: &DbPool, args: &Value) -> Result<String, String> {
     let query = args
         .get("query")
         .and_then(|q| q.as_str())
         .ok_or("Missing 'query' parameter")?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let pattern = format!("%{}%", query);
     let mut stmt = conn
         .prepare("SELECT id, title, slug, description FROM courses WHERE title LIKE ?1 ORDER BY id LIMIT 50")
@@ -620,7 +619,7 @@ fn tool_search_courses(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Stri
     to_json(&rows)
 }
 
-fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_import_url(_db: &DbPool, args: &Value) -> Result<String, String> {
     let url = args
         .get("url")
         .and_then(|u| u.as_str())
@@ -628,7 +627,7 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
 
     // Import is async and requires API key — spawn a blocking task
     let url = url.to_string();
-    let db = Arc::clone(_db);
+    let db = _db.clone();
 
     // Read config for API key
     let api_key = args
@@ -672,7 +671,7 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
         crate::services::course_importer::fetch_and_structure_course(&url, &client).await
     })?;
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let import_result =
         crate::services::course_importer::insert_course_to_db(&conn, &result, &url)?;
     drop(conn);
@@ -687,10 +686,10 @@ fn tool_import_url(_db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String,
     }))
 }
 
-fn tool_get_learning_path(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_learning_path(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
 
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let conn = db.get().map_err(|e| e.to_string())?;
     let result: Option<(i64, String, String, String)> = conn
         .query_row(
             "SELECT id, steps_json, generated_at, updated_at
@@ -729,7 +728,7 @@ fn tool_get_learning_path(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<S
     }
 }
 
-fn tool_semantic_search(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_semantic_search(db: &DbPool, args: &Value) -> Result<String, String> {
     let query = args
         .get("query")
         .and_then(|q| q.as_str())
@@ -754,19 +753,19 @@ fn tool_semantic_search(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Str
     to_json(&json_results)
 }
 
-fn tool_get_knowledge_graph(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_knowledge_graph(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
     let data = knowledge_graph::build_knowledge_graph(db, user_id)?;
     to_json(&data)
 }
 
-fn tool_get_recommendations(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_recommendations(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
     let data = recommendation::get_recommendations(db, user_id)?;
     to_json(&data)
 }
 
-fn tool_get_analytics(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<String, String> {
+fn tool_get_analytics(db: &DbPool, args: &Value) -> Result<String, String> {
     let user_id = arg_i64(args, "user_id", 1);
     let data = analytics::get_analytics(db, user_id)?;
     to_json(&data)
@@ -774,7 +773,7 @@ fn tool_get_analytics(db: &Arc<Mutex<Connection>>, args: &Value) -> Result<Strin
 
 // ─── Public API ───
 
-pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16, token: String) {
+pub fn start_mcp_server(db: DbPool, port: u16, token: String) {
     let allowed_origin = "tauri://localhost".to_string();
     std::thread::spawn(move || {
         let addr = format!("127.0.0.1:{}", port);
@@ -790,7 +789,7 @@ pub fn start_mcp_server(db: Arc<Mutex<Connection>>, port: u16, token: String) {
         for mut request in server.incoming_requests() {
             let path = request.url().to_string();
             let method = request.method().clone();
-            let db_clone = Arc::clone(&db);
+            let db_clone = db.clone();
             let token_clone = token.clone();
             let origin_clone = allowed_origin.clone();
 
