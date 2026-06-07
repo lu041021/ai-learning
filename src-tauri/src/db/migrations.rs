@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 3;
+const CURRENT_VERSION: i64 = 4;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     let version = get_schema_version(conn)?;
@@ -13,6 +13,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), String> {
     }
     if version < 3 {
         migrate_v2_to_v3(conn)?;
+    }
+    if version < 4 {
+        migrate_v3_to_v4(conn)?;
     }
 
     set_schema_version(conn, CURRENT_VERSION)?;
@@ -421,6 +424,21 @@ fn seed_concepts(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+fn migrate_v3_to_v4(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_created
+             ON quiz_attempts(user_id, created_at);
+         CREATE INDEX IF NOT EXISTS idx_user_progress_user_completed_at
+             ON user_progress(user_id, completed_at)
+             WHERE completed = 1;
+         CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
+             ON conversations(user_id, updated_at);
+         CREATE INDEX IF NOT EXISTS idx_learning_path_history_user
+             ON learning_path_history(user_id);",
+    )
+    .map_err(|e| format!("migrate_v3_to_v4: {}", e))
+}
+
 fn migrate_v2_to_v3(conn: &Connection) -> Result<(), String> {
     // Add UNIQUE(user_id, lesson_id) to user_progress.
     // SQLite requires a table rebuild to add a unique constraint.
@@ -559,5 +577,27 @@ mod tests {
         assert_eq!(title, "Old Course");
         assert_eq!(difficulty, "beginner");
         assert_eq!(tags, "[]");
+    }
+
+    #[test]
+    fn v4_indexes_exist_on_fresh_db() {
+        let conn = setup();
+        run_migrations(&conn).unwrap();
+        let indexes = [
+            "idx_quiz_attempts_user_created",
+            "idx_user_progress_user_completed_at",
+            "idx_conversations_user_updated",
+            "idx_learning_path_history_user",
+        ];
+        for idx in &indexes {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='index' AND name=?1)",
+                    rusqlite::params![idx],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(exists, "index {} should exist after v4 migration", idx);
+        }
     }
 }
