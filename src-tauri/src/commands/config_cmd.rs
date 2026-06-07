@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use std::io::Write;
+use crate::McpToken;
 use std::sync::Mutex;
 use tauri::State;
 
@@ -35,11 +35,9 @@ pub fn set_config(
 
 #[tauri::command]
 pub fn log_frontend_error(message: String, stack: Option<String>) -> Result<(), String> {
-    if let Some(log_dir) = dirs::data_local_dir() {
-        let log_path = log_dir.join("ai-learning").join("frontend_errors.log");
-        if let Some(parent) = log_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
+    use std::io::Write;
+    if let Ok(log_dir) = crate::config::get_log_dir() {
+        let log_path = log_dir.join("frontend_errors.log");
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -51,4 +49,9 @@ pub fn log_frontend_error(message: String, stack: Option<String>) -> Result<(), 
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_mcp_token(token: State<'_, McpToken>) -> String {
+    token.0.clone()
 }

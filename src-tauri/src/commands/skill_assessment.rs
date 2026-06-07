@@ -3,6 +3,7 @@ use serde_json::json;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
+use crate::commands::config_cmd::ConfigState;
 use crate::models::learning_path::{LearningPathOut, LearningPathStep};
 use crate::models::user_profile::{
     AssessUserSkillInput, AssessmentResponse, SkillAssessment, UserProfileFull, UserProfileOut,
@@ -14,10 +15,16 @@ use crate::services::profile_builder::{ProfileBuildData, QuizHistoryItem};
 pub async fn assess_user_skill(
     input: AssessUserSkillInput,
     db: State<'_, Arc<Mutex<Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: State<'_, ConfigState>,
 ) -> Result<UserProfileOut, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
@@ -112,10 +119,16 @@ pub fn get_user_profile(
 pub async fn generate_learning_path(
     user_id: i64,
     db: State<'_, Arc<Mutex<Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
@@ -207,17 +220,16 @@ pub async fn generate_learning_path(
         "quiz_avg": quiz_avg,
     }))
     .unwrap_or_default();
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut conn = db.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-    // Deactivate existing active paths
-    conn.execute(
+    tx.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
     )
     .map_err(|e| e.to_string())?;
 
-    // Determine new version
-    let next_version: i64 = conn
+    let next_version: i64 = tx
         .query_row(
             "SELECT COALESCE(MAX(version), 0) + 1 FROM learning_path_history WHERE user_id = ?1",
             rusqlite::params![user_id],
@@ -225,13 +237,14 @@ pub async fn generate_learning_path(
         )
         .unwrap_or(1);
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO learning_path_history (user_id, steps_json, version, is_active, context_snapshot) VALUES (?1, ?2, ?3, 1, ?4)",
         rusqlite::params![user_id, steps_json, next_version, context_snapshot],
     )
     .map_err(|e| e.to_string())?;
 
-    let path_id = conn.last_insert_rowid();
+    let path_id = tx.last_insert_rowid();
+    tx.commit().map_err(|e| e.to_string())?;
 
     Ok(LearningPathOut {
         id: path_id,
@@ -434,10 +447,16 @@ pub fn build_course_outline(conn: &Connection) -> Result<String, String> {
 pub async fn assess_user_skill_deep(
     input: AssessUserSkillInput,
     db: State<'_, Arc<Mutex<Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: State<'_, ConfigState>,
 ) -> Result<UserProfileFull, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
@@ -448,6 +467,7 @@ pub async fn assess_user_skill_deep(
         quiz_history,
         concept_scores,
         completed_lessons,
+        completed_count,
         chat_topics,
         streak_days,
         completion_pct,
@@ -467,6 +487,7 @@ pub async fn assess_user_skill_deep(
         quiz_history,
         concept_scores,
         completed_lessons,
+        completed_count,
         chat_topics,
         streak_days,
         completion_pct,
@@ -492,32 +513,42 @@ pub async fn assess_user_skill_deep(
     let cleaned = crate::services::skill_assessor::clean_json_response(&response_text);
     let mut profile = crate::services::profile_builder::profile_from_llm_json(
         &cleaned,
-        data.completed_lessons.len() as i64,
-        total_quizzes,
-        avg_quiz_score,
-        streak_days,
-        completion_pct,
-        None,
+        crate::services::profile_builder::ProfileStats {
+            total_lessons_completed: data.completed_count,
+            total_lessons: data.total_lessons,
+            total_quizzes_taken: total_quizzes,
+            avg_quiz_score,
+            streak_days,
+            completion_pct,
+            external_skill_context: None,
+        },
     )?;
     profile.generated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let profile_json = serde_json::to_string(&profile).unwrap_or_default();
+    let interests_json =
+        serde_json::to_string(&profile.interests).unwrap_or_else(|_| "[]".to_string());
     let conn = db.lock().map_err(|e| e.to_string())?;
-    let existing_id: Option<i64> = conn
-        .query_row(
-            "SELECT id FROM user_profiles WHERE user_id = ?1",
-            rusqlite::params![input.user_id],
-            |row| row.get(0),
-        )
-        .ok();
 
-    if let Some(pid) = existing_id {
-        conn.execute(
-            "UPDATE user_profiles SET profile_data = ?1, updated_at = datetime('now') WHERE id = ?2",
-            rusqlite::params![profile_json, pid],
-        )
-        .map_err(|e| e.to_string())?;
-    }
+    conn.execute(
+        "INSERT INTO user_profiles (user_id, experience_level, interests, learning_goals, assessment_completed, profile_data, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           experience_level = excluded.experience_level,
+           interests = excluded.interests,
+           learning_goals = excluded.learning_goals,
+           assessment_completed = 1,
+           profile_data = excluded.profile_data,
+           updated_at = excluded.updated_at",
+        rusqlite::params![
+            input.user_id,
+            profile.experience_level,
+            interests_json,
+            profile.learning_goals,
+            profile_json,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(profile)
 }
@@ -526,10 +557,16 @@ pub async fn assess_user_skill_deep(
 pub async fn generate_enriched_learning_path(
     user_id: i64,
     db: State<'_, Arc<Mutex<Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
@@ -571,15 +608,16 @@ pub async fn generate_enriched_learning_path(
 
     let steps_json = serde_json::to_string(&steps).unwrap_or_default();
     let context_snapshot = serde_json::to_string(&profile).unwrap_or_default();
-    let conn = db.lock().map_err(|e| e.to_string())?;
+    let mut conn = db.lock().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-    conn.execute(
+    tx.execute(
         "UPDATE learning_path_history SET is_active = 0 WHERE user_id = ?1 AND is_active = 1",
         rusqlite::params![user_id],
     )
     .map_err(|e| e.to_string())?;
 
-    let next_version: i64 = conn
+    let next_version: i64 = tx
         .query_row(
             "SELECT COALESCE(MAX(version), 0) + 1 FROM learning_path_history WHERE user_id = ?1",
             rusqlite::params![user_id],
@@ -587,13 +625,14 @@ pub async fn generate_enriched_learning_path(
         )
         .unwrap_or(1);
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO learning_path_history (user_id, steps_json, version, is_active, context_snapshot) VALUES (?1, ?2, ?3, 1, ?4)",
         rusqlite::params![user_id, steps_json, next_version, context_snapshot],
     )
     .map_err(|e| e.to_string())?;
 
-    let path_id = conn.last_insert_rowid();
+    let path_id = tx.last_insert_rowid();
+    tx.commit().map_err(|e| e.to_string())?;
 
     Ok(LearningPathOut {
         id: path_id,
@@ -615,15 +654,16 @@ fn gather_profile_data(
         String,
         Vec<QuizHistoryItem>,
         Vec<(String, String, f64, i64)>,
-        Vec<String>,
-        Vec<String>,
-        i64,
-        f64,
-        f64,
-        i64,
-        i64,
-        Vec<(String, f64)>,
-        Vec<(String, f64, i64)>,
+        Vec<String>,             // completed_lessons
+        i64,                     // completed_count
+        Vec<String>,             // chat_topics
+        i64,                     // streak_days
+        f64,                     // completion_pct
+        f64,                     // avg_quiz_score
+        i64,                     // total_lessons
+        i64,                     // total_quizzes
+        Vec<(String, f64)>,      // weak_concepts
+        Vec<(String, f64, i64)>, // domain_accuracy
     ),
     String,
 > {
@@ -710,6 +750,14 @@ fn gather_profile_data(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
+    let completed_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM user_progress WHERE user_id = ?1 AND completed = 1",
+            rusqlite::params![user_id],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     let chat_topics: Vec<String> = {
         let mut stmt = conn
             .prepare(
@@ -727,8 +775,8 @@ fn gather_profile_data(
             .map_err(|e| e.to_string())?;
         msgs.into_iter()
             .map(|m| {
-                if m.len() > 80 {
-                    format!("{}...", &m[..80])
+                if m.chars().count() > 80 {
+                    format!("{}...", m.chars().take(80).collect::<String>())
                 } else {
                     m
                 }
@@ -755,7 +803,6 @@ fn gather_profile_data(
     let total_lessons: i64 = conn
         .query_row("SELECT COUNT(*) FROM lessons", [], |r| r.get(0))
         .unwrap_or(1);
-    let completed_count = completed_lessons.len() as i64;
     let completion_pct = if total_lessons > 0 {
         ((completed_count as f64 / total_lessons as f64) * 1000.0).round() / 10.0
     } else {
@@ -811,6 +858,7 @@ fn gather_profile_data(
         quiz_history,
         concept_scores,
         completed_lessons,
+        completed_count,
         chat_topics,
         streak_days,
         completion_pct,
@@ -823,24 +871,23 @@ fn gather_profile_data(
 }
 
 fn compute_current_streak(dates: &[String]) -> i64 {
+    use chrono::NaiveDate;
     if dates.is_empty() {
         return 0;
     }
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let mut streak = if dates[0] == today { 1i64 } else { return 0i64 };
-
-    for i in 1..dates.len() {
-        let prev = &dates[i - 1];
-        let cur = &dates[i];
-        if prev == cur {
+    let parsed: Vec<NaiveDate> = dates
+        .iter()
+        .filter_map(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        .collect();
+    if parsed.is_empty() {
+        return 0;
+    }
+    let mut streak = 1i64;
+    for i in 1..parsed.len() {
+        if parsed[i - 1] == parsed[i] {
             continue;
         }
-        if prev.len() < 10 || cur.len() < 10 {
-            continue;
-        }
-        let prev_day: i64 = prev[8..10].parse().unwrap_or(0);
-        let cur_day: i64 = cur[8..10].parse().unwrap_or(0);
-        if prev_day == cur_day + 1 || prev_day == 1 && cur_day >= 28 {
+        if parsed[i - 1].pred_opt() == Some(parsed[i]) {
             streak += 1;
         } else {
             break;

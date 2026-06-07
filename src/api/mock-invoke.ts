@@ -571,7 +571,6 @@ const mockDeepProfile = {
 
 const HANDLERS: Record<string, (args: Record<string, unknown>) => unknown> = {
   get_config: () => mockConfig,
-  set_api_key: () => null,
   set_config: () => null,
 
   list_courses: () => mockCourses,

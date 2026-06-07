@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 
 const tauriCommands = [
   'get_config',
-  'set_api_key',
   'set_config',
   'list_courses',
   'get_course',
@@ -43,11 +42,13 @@ const tauriCommands = [
   'generate_goal_path',
   'assess_user_skill_deep',
   'generate_enriched_learning_path',
+  'log_frontend_error',
+  'get_mcp_token',
 ]
 
 describe('API-mock consistency', () => {
-  it('has all 42 Tauri commands declared', () => {
-    expect(tauriCommands).toHaveLength(42)
+  it('has all 43 Tauri commands declared', () => {
+    expect(tauriCommands).toHaveLength(43)
   })
 
   it('no duplicate commands', () => {

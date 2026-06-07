@@ -1,15 +1,20 @@
 use std::sync::{Arc, Mutex};
 
+use crate::commands::config_cmd::ConfigState;
 use crate::models::learning_path::{LearningPathOut, LearningPathStep};
 use crate::models::usage_profile::UsageProfile;
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
 #[tauri::command]
-pub async fn analyze_usage(
-    api_key: String,
-    model: String,
-    api_provider: String,
-) -> Result<UsageProfile, String> {
+pub async fn analyze_usage(config: tauri::State<'_, ConfigState>) -> Result<UsageProfile, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }
@@ -21,10 +26,16 @@ pub async fn analyze_usage(
 pub async fn generate_goal_path(
     user_id: i64,
     db: tauri::State<'_, Arc<Mutex<rusqlite::Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: tauri::State<'_, ConfigState>,
 ) -> Result<LearningPathOut, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     if api_key.is_empty() {
         return Err("请先在设置中配置 API Key".to_string());
     }

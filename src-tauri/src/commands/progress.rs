@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
+use crate::commands::config_cmd::ConfigState;
 use crate::models::progress::{ProgressOut, QuizResult, WrongAnswerItem};
 use crate::services::llm_client::{LlmClient, LlmProvider};
 
@@ -23,7 +24,9 @@ pub fn get_progress(
         .map_err(|e| e.to_string())?;
 
     let mut q_stmt = conn
-        .prepare("SELECT quiz_id, score FROM quiz_attempts WHERE user_id = ?1")
+        .prepare(
+            "SELECT quiz_id, score FROM quiz_attempts WHERE user_id = ?1 ORDER BY created_at DESC",
+        )
         .map_err(|e| e.to_string())?;
     let quiz_scores: HashMap<i64, f64> = q_stmt
         .query_map(rusqlite::params![user_id], |row| {
@@ -31,7 +34,10 @@ pub fn get_progress(
         })
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
-        .collect();
+        .fold(HashMap::new(), |mut acc, (qid, score)| {
+            acc.entry(qid).or_insert(score);
+            acc
+        });
 
     Ok(ProgressOut {
         completed_lesson_ids,
@@ -47,27 +53,15 @@ pub fn mark_complete(
 ) -> Result<String, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
 
-    let existing: Option<i64> = conn
-        .query_row(
-            "SELECT id FROM user_progress WHERE user_id = ?1 AND lesson_id = ?2",
-            rusqlite::params![user_id, lesson_id],
-            |row| row.get(0),
-        )
-        .ok();
-
-    if let Some(pid) = existing {
-        conn.execute(
-            "UPDATE user_progress SET completed = 1, completed_at = datetime('now') WHERE id = ?1",
-            rusqlite::params![pid],
-        )
-        .map_err(|e| e.to_string())?;
-    } else {
-        conn.execute(
-            "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at) VALUES (?1, ?2, 1, datetime('now'))",
-            rusqlite::params![user_id, lesson_id],
-        )
-        .map_err(|e| e.to_string())?;
-    }
+    conn.execute(
+        "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at)
+         VALUES (?1, ?2, 1, datetime('now'))
+         ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+             completed = 1,
+             completed_at = datetime('now')",
+        rusqlite::params![user_id, lesson_id],
+    )
+    .map_err(|e| e.to_string())?;
 
     crate::services::memory_bridge::update_learning_memory(&conn, user_id);
 
@@ -80,10 +74,16 @@ pub async fn submit_quiz(
     quiz_id: i64,
     answers: Vec<i64>,
     db: State<'_, Arc<Mutex<Connection>>>,
-    api_key: String,
-    model: String,
-    api_provider: String,
+    config: State<'_, ConfigState>,
 ) -> Result<QuizResult, String> {
+    let (api_key, model, api_provider) = {
+        let cfg = config.config.lock().map_err(|e| e.to_string())?;
+        (
+            cfg.api_key.clone(),
+            cfg.model.clone(),
+            cfg.api_provider.clone(),
+        )
+    };
     let questions_data: Vec<crate::services::quiz_grader::QuizQuestionData> = {
         let conn = db.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
@@ -135,24 +135,14 @@ pub async fn submit_quiz(
                 )
                 .ok();
             if let Some(lid) = lesson_id {
-                let existing: Option<i64> = conn
-                    .query_row(
-                        "SELECT id FROM user_progress WHERE user_id = ?1 AND lesson_id = ?2",
-                        rusqlite::params![user_id, lid],
-                        |row| row.get(0),
-                    )
-                    .ok();
-                if let Some(pid) = existing {
-                    let _ = conn.execute(
-                        "UPDATE user_progress SET completed = 1, completed_at = datetime('now') WHERE id = ?1",
-                        rusqlite::params![pid],
-                    );
-                } else {
-                    let _ = conn.execute(
-                        "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at) VALUES (?1, ?2, 1, datetime('now'))",
-                        rusqlite::params![user_id, lid],
-                    );
-                }
+                let _ = conn.execute(
+                    "INSERT INTO user_progress (user_id, lesson_id, completed, completed_at)
+                     VALUES (?1, ?2, 1, datetime('now'))
+                     ON CONFLICT(user_id, lesson_id) DO UPDATE SET
+                         completed = 1,
+                         completed_at = datetime('now')",
+                    rusqlite::params![user_id, lid],
+                );
             }
         }
 
@@ -188,6 +178,16 @@ pub fn clear_user_data(user_id: i64, db: State<'_, Arc<Mutex<Connection>>>) -> R
     .map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM user_progress WHERE user_id = ?1",
+        rusqlite::params![user_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM learning_path_history WHERE user_id = ?1",
+        rusqlite::params![user_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM user_profiles WHERE user_id = ?1",
         rusqlite::params![user_id],
     )
     .map_err(|e| e.to_string())?;
@@ -233,47 +233,76 @@ pub fn get_wrong_answers(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::new();
-    for (quiz_id, answers_json, attempted_at, quiz_title, lesson_id, lesson_title, course_slug) in
-        attempts
-    {
-        let answers: Vec<i64> = serde_json::from_str(&answers_json).unwrap_or_default();
+    if attempts.is_empty() {
+        return Ok(Vec::new());
+    }
 
-        let mut q_stmt = conn
-            .prepare("SELECT question_text, options, correct_answer_index, explanation FROM quiz_questions WHERE quiz_id = ?1 ORDER BY id")
-            .map_err(|e| e.to_string())?;
-        let questions: Vec<(String, String, i64, String)> = q_stmt
-            .query_map(rusqlite::params![quiz_id], |row| {
+    // Batch-load all quiz questions in one query
+    let mut quiz_ids: Vec<i64> = attempts.iter().map(|(qid, ..)| *qid).collect();
+    quiz_ids.sort_unstable();
+    quiz_ids.dedup();
+    let placeholders = quiz_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let q_sql = format!(
+        "SELECT quiz_id, question_text, options, correct_answer_index, explanation
+         FROM quiz_questions WHERE quiz_id IN ({}) ORDER BY quiz_id, id",
+        placeholders
+    );
+    let mut questions_by_quiz: HashMap<i64, Vec<(String, String, i64, String)>> = HashMap::new();
+    {
+        let mut q_stmt = conn.prepare(&q_sql).map_err(|e| e.to_string())?;
+        q_stmt
+            .query_map([], |row| {
                 Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get::<_, String>(3).unwrap_or_default(),
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, String>(4).unwrap_or_default(),
                 ))
             })
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .for_each(|(qid, qtext, opts, cidx, expl)| {
+                questions_by_quiz
+                    .entry(qid)
+                    .or_default()
+                    .push((qtext, opts, cidx, expl));
+            });
+    }
 
-        for (i, (question_text, options_json, correct_idx, explanation)) in
-            questions.iter().enumerate()
-        {
-            let user_answer = answers.get(i).copied().unwrap_or(-1);
-            if user_answer != *correct_idx {
-                let options: Vec<String> = serde_json::from_str(options_json).unwrap_or_default();
-                result.push(WrongAnswerItem {
-                    quiz_id,
-                    quiz_title: quiz_title.clone(),
-                    question_text: question_text.clone(),
-                    options,
-                    your_answer_index: user_answer,
-                    correct_answer_index: *correct_idx,
-                    explanation: explanation.clone(),
-                    lesson_id,
-                    lesson_title: lesson_title.clone(),
-                    course_slug: course_slug.clone(),
-                    attempted_at: attempted_at.clone(),
-                });
+    let mut result = Vec::new();
+    for (quiz_id, answers_json, attempted_at, quiz_title, lesson_id, lesson_title, course_slug) in
+        &attempts
+    {
+        let answers: Vec<i64> = serde_json::from_str(answers_json).unwrap_or_default();
+        if let Some(questions) = questions_by_quiz.get(quiz_id) {
+            for (i, (question_text, options_json, correct_idx, explanation)) in
+                questions.iter().enumerate()
+            {
+                let user_answer = answers.get(i).copied().unwrap_or(-1);
+                if user_answer != *correct_idx {
+                    let options: Vec<String> =
+                        serde_json::from_str(options_json).unwrap_or_default();
+                    result.push(WrongAnswerItem {
+                        quiz_id: *quiz_id,
+                        quiz_title: quiz_title.clone(),
+                        question_text: question_text.clone(),
+                        options,
+                        your_answer_index: user_answer,
+                        correct_answer_index: *correct_idx,
+                        explanation: explanation.clone(),
+                        lesson_id: *lesson_id,
+                        lesson_title: lesson_title.clone(),
+                        course_slug: course_slug.clone(),
+                        attempted_at: attempted_at.clone(),
+                    });
+                }
             }
         }
     }
